@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="card" style="max-width:860px; margin:0 auto;">
+  <h1>Assistant de premier démarrage</h1>
+  <p class="muted">Bienvenue 👋 Remplissez simplement ces champs pour initialiser l’application pour votre association.</p>
+
+  <form method="post" class="stack" style="gap:12px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <h3 style="margin-bottom:0;">1) Identité</h3>
+    <div class="row">
+      <div>
+        <label>Nom de l’application</label>
+        <input class="in" name="app_name" placeholder="Ex: Gestion Association" required>
+      </div>
+      <div>
+        <label>Nom de votre structure</label>
+        <input class="in" name="organization_name" placeholder="Ex: Association Exemple" required>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:0;">2) Compte administrateur</h3>
+    <div class="row">
+      <div>
+        <label>Nom de l’administrateur</label>
+        <input class="in" name="admin_name" placeholder="Ex: Madame Dupont" required>
+      </div>
+      <div>
+        <label>Email administrateur</label>
+        <input class="in" type="email" name="admin_email" placeholder="admin@association.fr" required>
+      </div>
+    </div>
+
+    <div>
+      <label>Mot de passe administrateur (8 caractères minimum)</label>
+      <input class="in" type="password" name="admin_password" required>
+    </div>
+
+    <div class="muted" style="font-size:13px;">
+      Après validation, vous pourrez tout modifier dans <strong>Administration &gt; Identité app</strong>.
+    </div>
+
+    <div style="text-align:right;">
+      <button class="btn" type="submit">Terminer l’installation</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

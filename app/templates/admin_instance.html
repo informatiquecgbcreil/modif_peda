@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="card" style="max-width:860px; margin:0 auto;">
+  <h1>Configuration simplifiée de votre structure</h1>
+  <p class="muted">Cette page permet à l’admin technique de personnaliser l’application <b>sans toucher au code</b>.</p>
+
+  <form method="post" enctype="multipart/form-data" class="stack" style="gap:12px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="row">
+      <div>
+        <label>Nom de l’application</label>
+        <input class="in" name="app_name" value="{{ settings.app_name or APP_NAME }}" placeholder="Ex: Portail Gestion Associative">
+      </div>
+      <div>
+        <label>Nom de la structure</label>
+        <input class="in" name="organization_name" value="{{ settings.organization_name or ORGANIZATION_NAME }}" placeholder="Ex: Centre Social ABC">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Logo de l’application (png/jpg/webp/svg)</label>
+        <input class="in" type="file" name="app_logo" accept=".png,.jpg,.jpeg,.webp,.svg,image/*">
+        {% if APP_LOGO_URL %}
+          <div style="margin-top:8px;"><img src="{{ APP_LOGO_URL }}" alt="Logo application" style="height:56px; object-fit:contain;"></div>
+        {% endif %}
+      </div>
+      <div>
+        <label>Logo de la structure (png/jpg/webp/svg)</label>
+        <input class="in" type="file" name="organization_logo" accept=".png,.jpg,.jpeg,.webp,.svg,image/*">
+        {% if ORGANIZATION_LOGO_URL %}
+          <div style="margin-top:8px;"><img src="{{ ORGANIZATION_LOGO_URL }}" alt="Logo structure" style="height:56px; object-fit:contain;"></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="muted" style="font-size:13px;">
+      Astuce: vous pouvez revenir ici à tout moment pour modifier les noms et logos.
+    </div>
+
+    <div style="text-align:right;">
+      <button class="btn" type="submit">Enregistrer la configuration</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

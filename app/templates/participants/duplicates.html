@@ -1,0 +1,148 @@
+{% extends "layout.html" %}
+{% block body %}
+
+<div class="stack">
+  <div class="inline" style="justify-content:space-between; align-items:center;">
+    <h1 style="margin:0">Doublons participants</h1>
+    <a class="btn" href="{{ url_for('participants.list_participants') }}">⬅ Retour</a>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Mode</h2>
+    <form class="inline" method="get" action="{{ url_for('participants.duplicates') }}" style="gap:10px; flex-wrap:wrap;">
+      <select class="in" name="mode" style="max-width:220px">
+        <option value="certain" {% if mode=='certain' %}selected{% endif %}>Doublons certains</option>
+        <option value="probable" {% if mode=='probable' %}selected{% endif %}>Doublons probables</option>
+      </select>
+
+      <input class="in" type="text" name="t" value="{{ threshold }}" style="max-width:120px"
+             placeholder="Seuil (0.90)">
+
+      <button class="btn" type="submit">Analyser</button>
+      <span class="muted" style="font-size:12px">
+        {% if not is_global %}Filtré sur ton secteur.{% else %}Global.{% endif %}
+      </span>
+    </form>
+  </div>
+
+  {% if mode == 'certain' %}
+  <div class="card">
+    <h2 style="margin-top:0">Doublons certains</h2>
+    {% if not groups %}
+      <div class="muted">Aucun doublon certain détecté ✅</div>
+    {% endif %}
+
+    {% for g in groups %}
+      <div class="card" style="margin-top:12px;">
+        <div class="inline" style="justify-content:space-between;">
+          <div>
+            <strong>{{ g.type }}</strong>
+            <span class="muted" style="margin-left:8px">({{ g["items"]|length }})</span>
+          </div>
+          <div class="muted" style="font-size:12px">{{ g.key }}</div>
+        </div>
+
+        <div class="tablewrap" style="margin-top:10px;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>Nom</th><th>Email</th><th>Téléphone</th><th>Secteur</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in g["items"] %}
+              <tr>
+                <td>{{ p.id }}</td>
+                <td><strong>{{ p.nom }} {{ p.prenom }}</strong></td>
+                <td>{{ p.email or '—' }}</td>
+                <td>{{ p.telephone or '—' }}</td>
+                <td>{{ p.created_secteur or '—' }}</td>
+                <td style="text-align:right">
+                  <a class="btn" href="{{ url_for('participants.edit_participant', participant_id=p.id) }}">Ouvrir</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if mode == 'probable' %}
+  <div class="card">
+    <h2 style="margin-top:0">Doublons probables</h2>
+    <div class="muted" style="font-size:12px">
+      Comparaison approximative sur nom+prénom (seuil {{ threshold }}). Liste limitée.
+    </div>
+
+    {% if not probable %}
+      <div class="muted" style="margin-top:8px">Aucun match probable détecté ✅</div>
+    {% endif %}
+
+    {% for x in probable %}
+      <div class="card" style="margin-top:12px;">
+        <div class="inline" style="justify-content:space-between;">
+          <strong>Score {{ x.score }}</strong>
+          <span class="muted">suspect</span>
+        </div>
+		<div class="inline" style="gap:10px; flex-wrap:wrap; margin-top:10px;">
+		  <form method="post" action="{{ url_for('participants.merge_participants') }}">
+			<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+			<input type="hidden" name="keep_id" value="{{ x.a.id }}">
+			<input type="hidden" name="merge_ids" value="{{ x.a.id }}">
+			<input type="hidden" name="merge_ids" value="{{ x.b.id }}">
+			<button class="btn ok" type="submit"
+			  onclick="return confirm('Garder A et fusionner B → A ?');">
+			  Garder A ✅
+			</button>
+		  </form>
+
+		  <form method="post" action="{{ url_for('participants.merge_participants') }}">
+			<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+			<input type="hidden" name="keep_id" value="{{ x.b.id }}">
+			<input type="hidden" name="merge_ids" value="{{ x.a.id }}">
+			<input type="hidden" name="merge_ids" value="{{ x.b.id }}">
+			<button class="btn warn" type="submit"
+			  onclick="return confirm('Garder B et fusionner A → B ?');">
+			  Garder B ⚠️
+			</button>
+		  </form>
+
+		  <a class="btn" href="{{ url_for('participants.edit_participant', participant_id=x.a.id) }}">Ouvrir A</a>
+		  <a class="btn" href="{{ url_for('participants.edit_participant', participant_id=x.b.id) }}">Ouvrir B</a>
+		</div>
+
+        <div class="tablewrap" style="margin-top:10px;">
+          <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Email</th><th>Tél</th><th>Secteur</th><th></th></tr></thead>
+            <tbody>
+              {% set p = x.a %}
+              <tr>
+                <td>{{ p.id }}</td>
+                <td><strong>{{ p.nom }} {{ p.prenom }}</strong></td>
+                <td>{{ p.email or '—' }}</td>
+                <td>{{ p.telephone or '—' }}</td>
+                <td>{{ p.created_secteur or '—' }}</td>
+                <td style="text-align:right"><a class="btn" href="{{ url_for('participants.edit_participant', participant_id=p.id) }}">Ouvrir</a></td>
+              </tr>
+              {% set p = x.b %}
+              <tr>
+                <td>{{ p.id }}</td>
+                <td><strong>{{ p.nom }} {{ p.prenom }}</strong></td>
+                <td>{{ p.email or '—' }}</td>
+                <td>{{ p.telephone or '—' }}</td>
+                <td>{{ p.created_secteur or '—' }}</td>
+                <td style="text-align:right"><a class="btn" href="{{ url_for('participants.edit_participant', participant_id=p.id) }}">Ouvrir</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
