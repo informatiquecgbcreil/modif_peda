@@ -8,6 +8,10 @@
       <div style="margin-bottom:10px;">
         <a class="btn" href="{{ url_for('pedagogie.kiosk_pedagogique') }}">🧭 Ouvrir le Kiosk pédagogique (V1 souple)</a>
       </div>
+      <div style="margin-bottom:10px;">
+        <a class="btn" href="{{ url_for('pedagogie.modules_pedagogiques') }}">📦 Modules pédagogiques</a>
+        <a class="btn" href="{{ url_for('pedagogie.pilotage_objectifs') }}">📈 Pilotage objectifs / RA</a>
+      </div>
       <form method="get" class="inline" style="gap:8px; flex-wrap:wrap;">
         <select class="in" name="projet_id">
           <option value="">Filtrer par projet</option>

@@ -166,6 +166,7 @@
                   {% else %}
                     <span class="muted">Aucune compétence</span>
                   {% endif %}
+                  <a class="btn" href="{{ url_for('pedagogie.participant_passeport', participant_id=pr.participant.id) }}">Passeport</a>
                 </td>
               </tr>
             {% else %}
@@ -275,19 +276,19 @@
                         <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:8px;">
                           <label class="badge bg-danger">
                             <input class="form-check-input me-1" type="radio" name="etat_{{ comp.id }}" value="0" {% if eval and eval.etat == 0 %}checked{% endif %}>
-                            Non acquis
+                            0 · Non abordé
                           </label>
                           <label class="badge bg-warning text-dark">
                             <input class="form-check-input me-1" type="radio" name="etat_{{ comp.id }}" value="1" {% if eval and eval.etat == 1 %}checked{% endif %}>
-                            En cours
+                            1 · Vu / compris
                           </label>
                           <label class="badge bg-success">
                             <input class="form-check-input me-1" type="radio" name="etat_{{ comp.id }}" value="2" {% if eval and eval.etat == 2 %}checked{% endif %}>
-                            Acquis
+                            2 · Fait avec aide
                           </label>
                           <label class="badge bg-primary">
                             <input class="form-check-input me-1" type="radio" name="etat_{{ comp.id }}" value="3" {% if eval and eval.etat == 3 %}checked{% endif %}>
-                            Expert
+                            3 · Fait seul
                           </label>
                         </div>
                         <div class="spacer"></div>

@@ -17,10 +17,12 @@ from app.models import (
     PresenceActivite,
     Quartier,
     Referentiel,
+    Competence,
     AtelierCapaciteMois,
     ArchiveEmargement,
     Evaluation,
     Objectif,
+    PedagogieModule,
 )
 
 from . import bp
@@ -692,11 +694,18 @@ def session_new(atelier_id: int):
                 capacite=int(capacite) if capacite else None,
             )
 
-        competence_ids = [int(cid) for cid in request.form.getlist("competence_ids") if cid.isdigit()]
+        competence_ids = {int(cid) for cid in request.form.getlist("competence_ids") if cid.isdigit()}
+        module_ids = [int(mid) for mid in request.form.getlist("module_ids") if mid.isdigit()]
+        modules = PedagogieModule.query.filter(PedagogieModule.id.in_(module_ids), PedagogieModule.actif.is_(True)).all() if module_ids else []
+        for mod in modules:
+            for comp in mod.competences:
+                competence_ids.add(comp.id)
+
         if competence_ids:
-            s.competences = Competence.query.filter(Competence.id.in_(competence_ids)).all()
+            s.competences = Competence.query.filter(Competence.id.in_(list(competence_ids))).all()
         else:
             s.competences = []
+        s.modules = modules
 
         db.session.add(s)
         db.session.commit()
@@ -705,6 +714,7 @@ def session_new(atelier_id: int):
 
     referentiels = _load_referentiels()
     selected_competences = {c.id for c in atelier.competences}
+    modules = PedagogieModule.query.filter(PedagogieModule.actif.is_(True)).order_by(PedagogieModule.nom.asc()).all()
     return render_template(
         "activite/session_form.html",
         secteur=secteur,
@@ -712,6 +722,7 @@ def session_new(atelier_id: int):
         session=None,
         referentiels=referentiels,
         selected_competences=selected_competences,
+        modules=modules,
     )
 
 

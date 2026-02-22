@@ -1,6 +1,8 @@
 import datetime
+import csv
+from io import StringIO
 
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, Response
 from flask_login import login_required, current_user
 
 from app.extensions import db
@@ -16,7 +18,10 @@ from app.models import (
     PresenceActivite,
     ObjectifSuivi,
     ProjetAtelier,
+    ObjectifCompetenceMap,
+    PedagogieModule,
 )
+from .services import compute_objectif_scores, participant_timeline
 
 from . import bp
 
@@ -106,6 +111,32 @@ def referentiels_edit(referentiel_id: int):
     )
 
 
+@bp.route("/modules", methods=["GET", "POST"])
+@login_required
+@require_perm("pedagogie:view")
+def modules_pedagogiques():
+    if request.method == "POST":
+        action = request.form.get("action") or ""
+        if action == "create_module":
+            nom = (request.form.get("nom") or "").strip()
+            description = (request.form.get("description") or "").strip() or None
+            competence_ids = [int(cid) for cid in request.form.getlist("competence_ids") if cid.isdigit()]
+            if not nom:
+                flash("Nom du module obligatoire.", "danger")
+                return redirect(url_for("pedagogie.modules_pedagogiques"))
+            mod = PedagogieModule(nom=nom, description=description)
+            if competence_ids:
+                mod.competences = Competence.query.filter(Competence.id.in_(competence_ids)).all()
+            db.session.add(mod)
+            db.session.commit()
+            flash("Module pédagogique créé.", "success")
+            return redirect(url_for("pedagogie.modules_pedagogiques"))
+
+    referentiels = Referentiel.query.order_by(Referentiel.nom.asc()).all()
+    modules = PedagogieModule.query.order_by(PedagogieModule.nom.asc()).all()
+    return render_template("pedagogie/modules.html", referentiels=referentiels, modules=modules)
+
+
 @bp.route("/objectifs", methods=["GET", "POST"])
 @login_required
 @require_perm("pedagogie:view")
@@ -142,9 +173,16 @@ def objectifs():
             )
             competence_ids = [int(cid) for cid in request.form.getlist("competence_ids") if cid.isdigit()]
             if competence_ids:
-                obj.competences = Competence.query.filter(Competence.id.in_(competence_ids)).all()
+                comps = Competence.query.filter(Competence.id.in_(competence_ids)).all()
+                obj.competences = comps
             db.session.add(obj)
             db.session.commit()
+            if obj.type == "operationnel" and competence_ids:
+                for cid in competence_ids:
+                    existing = ObjectifCompetenceMap.query.filter_by(objectif_id=obj.id, competence_id=cid).first()
+                    if not existing:
+                        db.session.add(ObjectifCompetenceMap(objectif_id=obj.id, competence_id=cid, poids=1.0, actif=True))
+                db.session.commit()
             flash("Objectif ajouté.", "success")
             return redirect(url_for("pedagogie.objectifs", projet_id=selected_projet_id, atelier_id=selected_atelier_id, session_id=selected_session_id))
 
@@ -325,4 +363,63 @@ def kiosk_pedagogique():
         selected_participant_id=participant_id,
         objectifs=objectifs,
         recent_rows=recent_rows,
+    )
+
+
+@bp.route("/participant/<int:participant_id>/passeport")
+@login_required
+@require_perm("pedagogie:view")
+def participant_passeport(participant_id: int):
+    participant, events, current_levels = participant_timeline(participant_id)
+    return render_template(
+        "pedagogie/participant_passeport.html",
+        participant=participant,
+        events=events,
+        current_levels=current_levels,
+    )
+
+
+@bp.route("/pilotage")
+@login_required
+@require_perm("pedagogie:view")
+def pilotage_objectifs():
+    projet_id = request.args.get("projet_id", type=int)
+    start_date = request.args.get("start_date") or None
+    end_date = request.args.get("end_date") or None
+    start = datetime.datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
+    end = datetime.datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
+
+    rows = compute_objectif_scores(projet_id=projet_id, start_date=start, end_date=end)
+    projets = Projet.query.order_by(Projet.nom.asc()).all()
+    return render_template("pedagogie/pilotage.html", rows=rows, projets=projets, projet_id=projet_id, start_date=start_date, end_date=end_date)
+
+
+@bp.route("/export_ra.csv")
+@login_required
+@require_perm("pedagogie:view")
+def export_ra_csv():
+    projet_id = request.args.get("projet_id", type=int)
+    start_date = request.args.get("start_date") or None
+    end_date = request.args.get("end_date") or None
+    start = datetime.datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
+    end = datetime.datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
+    rows = compute_objectif_scores(projet_id=projet_id, start_date=start, end_date=end)
+
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(["Projet", "Type objectif", "Objectif", "Score atteinte %", "Nb évaluations", "Nb participants"])
+    for r in rows:
+        obj = r["objectif"]
+        w.writerow([
+            obj.projet.nom if obj.projet else "",
+            obj.type,
+            obj.titre,
+            "" if r["score"] is None else r["score"],
+            r["evaluations"],
+            r["participants"],
+        ])
+    return Response(
+        sio.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=rapport_activite_pedagogie.csv"},
     )
