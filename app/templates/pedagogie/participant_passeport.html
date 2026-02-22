@@ -1,0 +1,42 @@
+{% extends 'layout.html' %}
+{% block body %}
+<div class="stack">
+  <div class="card">
+    <h1 style="margin-top:0;">Passeport compétences · {{ participant.nom }} {{ participant.prenom }}</h1>
+    <p class="muted">Niveau actuel = dernière évaluation enregistrée (0: non abordé, 1: vu/compris, 2: fait avec aide, 3: fait seul).</p>
+  </div>
+
+  <div class="card">
+    <h2>Niveaux actuels</h2>
+    <ul>
+      {% for comp_id, lvl in current_levels.items() %}
+        <li>Compétence #{{ comp_id }} : <strong>{{ lvl }}</strong></li>
+      {% else %}
+        <li class="muted">Aucune évaluation.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Timeline</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Date</th><th>Compétence</th><th>Niveau</th><th>Commentaire</th><th>Session</th></tr></thead>
+        <tbody>
+          {% for e in events %}
+            <tr>
+              <td>{{ e.date_evaluation }}</td>
+              <td>{{ e.competence.code }} · {{ e.competence.nom }}</td>
+              <td>{{ e.etat }}</td>
+              <td>{{ e.commentaire or '' }}</td>
+              <td>{{ e.session_id or '—' }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="muted">Aucune donnée.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

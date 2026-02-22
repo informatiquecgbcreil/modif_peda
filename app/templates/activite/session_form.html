@@ -45,6 +45,35 @@
           <div class="muted">Par défaut la session reprend la capacité de l’atelier (modifiable ici si besoin).</div>
         {% endif %}
 
+        <div class="spacer"></div>
+        <h3 style="margin:0;">Préparer les compétences (flux simplifié)</h3>
+        <div class="grid" style="grid-template-columns:1fr 1fr; gap:12px;">
+          <div>
+            <label>Modules pédagogiques (packs)</label>
+            <select class="in" name="module_ids" id="module_ids" multiple size="6">
+              {% for mod in modules|default([]) %}
+                <option value="{{ mod.id }}" data-comp-ids="{{ mod.competences|map(attribute='id')|join(',') }}">{{ mod.nom }}</option>
+              {% endfor %}
+            </select>
+            <div class="muted">Sélectionne un ou plusieurs modules pour pré-cocher automatiquement les compétences.</div>
+          </div>
+          <div>
+            <label>Compétences sélectionnées</label>
+            <div class="card" style="max-height:240px; overflow:auto;">
+              {% for ref in referentiels %}
+                <div style="margin-bottom:8px;"><strong>{{ ref.nom }}</strong></div>
+                {% for comp in ref.competences %}
+                  <label style="display:block; margin-bottom:4px;">
+                    <input type="checkbox" name="competence_ids" value="{{ comp.id }}" {% if comp.id in selected_competences %}checked{% endif %}> {{ comp.code }} · {{ comp.nom }}
+                  </label>
+                {% else %}
+                  <div class="muted">Aucune compétence.</div>
+                {% endfor %}
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
         <div class="row" style="gap:10px; flex-wrap:wrap;">
           <button class="btn" type="submit">Créer</button>
           <a class="btn" href="{{ url_for('activite.sessions', atelier_id=atelier.id) }}">Annuler</a>
@@ -52,4 +81,22 @@
       </form>
     </div>
   </div>
+
+  <script>
+    (() => {
+      const modSelect = document.getElementById('module_ids');
+      if (!modSelect) return;
+      modSelect.addEventListener('change', () => {
+        const selected = Array.from(modSelect.selectedOptions);
+        const compIds = new Set();
+        selected.forEach(opt => {
+          const raw = (opt.dataset.compIds || '').split(',').map(x => x.trim()).filter(Boolean);
+          raw.forEach(id => compIds.add(id));
+        });
+        document.querySelectorAll('input[name="competence_ids"]').forEach(cb => {
+          if (compIds.has(cb.value)) cb.checked = true;
+        });
+      });
+    })();
+  </script>
 {% endblock %}
