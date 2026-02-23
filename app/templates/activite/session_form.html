@@ -51,4 +51,22 @@
       </form>
     </div>
   </div>
+
+  <script>
+    (() => {
+      const modSelect = document.getElementById('module_ids');
+      if (!modSelect) return;
+      modSelect.addEventListener('change', () => {
+        const selected = Array.from(modSelect.selectedOptions);
+        const compIds = new Set();
+        selected.forEach(opt => {
+          const raw = (opt.dataset.compIds || '').split(',').map(x => x.trim()).filter(Boolean);
+          raw.forEach(id => compIds.add(id));
+        });
+        document.querySelectorAll('input[name="competence_ids"]').forEach(cb => {
+          if (compIds.has(cb.value)) cb.checked = true;
+        });
+      });
+    })();
+  </script>
 {% endblock %}
