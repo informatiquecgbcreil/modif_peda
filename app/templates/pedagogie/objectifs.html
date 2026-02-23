@@ -3,127 +3,86 @@
 {% block body %}
   <div class="stack">
     <div class="card">
-      <h1 style="margin-top:0;">Objectifs pédagogiques</h1>
-      <p class="muted">Crée les objectifs généraux (projet), spécifiques (atelier) et opérationnels (session).</p>
-      <div style="margin-bottom:10px;">
-        <a class="btn" href="{{ url_for('pedagogie.kiosk_pedagogique') }}">🧭 Ouvrir le Kiosk pédagogique (V1 souple)</a>
+      <h1 style="margin-top:0;">Objectifs pédagogiques (assistant)</h1>
+      <p class="muted">Flux simple : 1) choisir type, 2) renseigner le minimum, 3) créer. Les options avancées restent cachées.</p>
+      <div style="margin-bottom:10px;" class="row">
+        <a class="btn" href="{{ url_for('pedagogie.modules_pedagogiques') }}">📦 Catalogue modules</a>
+        <a class="btn" href="{{ url_for('pedagogie.plan_projet') }}">🧩 Plan de projet</a>
+        <a class="btn" href="{{ url_for('pedagogie.pilotage_objectifs') }}">📈 Pilotage RA</a>
       </div>
-      <form method="get" class="inline" style="gap:8px; flex-wrap:wrap;">
-        <select class="in" name="projet_id">
-          <option value="">Filtrer par projet</option>
-          {% for p in projets %}
-            <option value="{{ p.id }}" {% if projet_id == p.id %}selected{% endif %}>{{ p.secteur }} · {{ p.nom }}</option>
-          {% endfor %}
-        </select>
-        <select class="in" name="atelier_id">
-          <option value="">Filtrer par atelier</option>
-          {% for a in ateliers %}
-            <option value="{{ a.id }}" {% if atelier_id == a.id %}selected{% endif %}>{{ a.secteur }} · {{ a.nom }}</option>
-          {% endfor %}
-        </select>
-        <select class="in" name="session_id">
-          <option value="">Filtrer par session</option>
-          {% for s in sessions %}
-            {% set label = s.date_session or s.rdv_date or '' %}
-            <option value="{{ s.id }}" {% if session_id == s.id %}selected{% endif %}>{{ s.atelier.nom }} · {{ label }}</option>
-          {% endfor %}
-        </select>
-        <button class="btn ok" type="submit">Filtrer</button>
-      </form>
     </div>
 
     <div class="card">
-      <h2 style="margin-top:0;">Ajouter un objectif</h2>
-      <form method="post" class="stack">
+      <h2 style="margin-top:0;">Créer un objectif</h2>
+      <form method="post" class="stack" id="objectifForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="action" value="create_objectif">
+
+        <div>
+          <label>Étape 1 · Type d'objectif</label>
+          <select class="in" name="type" id="objType" required>
+            <option value="">Choisir…</option>
+            <option value="general">Objectif général (OG)</option>
+            <option value="specifique">Objectif spécifique (OS)</option>
+            <option value="operationnel">Objectif opérationnel (OO)</option>
+          </select>
+        </div>
+
         <div class="grid" style="grid-template-columns:1fr 1fr; gap:12px;">
           <div>
-            <label>Type</label>
-            <select class="in" name="type" required>
-              <option value="">Choisir…</option>
-              <option value="general">Objectif général (projet)</option>
-              <option value="specifique">Objectif spécifique (atelier)</option>
-              <option value="operationnel">Objectif opérationnel (session)</option>
-            </select>
+            <label>Étape 2 · Titre</label>
+            <input class="in" name="titre" required>
           </div>
           <div>
-            <label>Seuil de validation (%)</label>
+            <label>Seuil (%)</label>
             <input class="in" type="number" name="seuil_validation" min="0" max="100" step="1" value="60">
           </div>
         </div>
 
-        <label>Titre</label>
-        <input class="in" name="titre" required>
-
-        <label>Description</label>
-        <textarea class="in" name="description" rows="3"></textarea>
-
-        <div class="grid" style="grid-template-columns:1fr 1fr 1fr; gap:12px;">
-          <div>
-            <label>Projet</label>
-            <select class="in" name="projet_id">
-              <option value="">—</option>
-              {% for p in projets %}
-                <option value="{{ p.id }}" {% if projet_id == p.id %}selected{% endif %}>{{ p.secteur }} · {{ p.nom }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label>Atelier</label>
-            <select class="in" name="atelier_id">
-              <option value="">—</option>
-              {% for a in ateliers %}
-                <option value="{{ a.id }}" {% if atelier_id == a.id %}selected{% endif %}>{{ a.secteur }} · {{ a.nom }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label>Session</label>
-            <select class="in" name="session_id">
-              <option value="">—</option>
-              {% for s in sessions %}
-                {% set label = s.date_session or s.rdv_date or '' %}
-                <option value="{{ s.id }}" {% if session_id == s.id %}selected{% endif %}>{{ s.atelier.nom }} · {{ label }}</option>
-              {% endfor %}
-            </select>
-          </div>
+        <div id="fieldProjet" style="display:none;">
+          <label>Projet (obligatoire pour OG)</label>
+          <select class="in" name="projet_id">
+            <option value="">—</option>
+            {% for p in projets %}
+              <option value="{{ p.id }}">{{ p.secteur }} · {{ p.nom }}</option>
+            {% endfor %}
+          </select>
         </div>
 
-        <label>Objectif parent</label>
-        <select class="in" name="parent_id">
-          <option value="">Aucun</option>
-          {% for obj in parent_options %}
-            <option value="{{ obj.id }}">{{ obj.titre }} ({{ obj.type }})</option>
-          {% endfor %}
-        </select>
-
-        <div class="spacer"></div>
-        <h3 style="margin-bottom:6px;">Compétences évaluées (pour les objectifs opérationnels)</h3>
-        {% if referentiels %}
-          <div class="grid" style="grid-template-columns:1fr 1fr; gap:12px;">
-            {% for ref in referentiels %}
-              <div class="card" style="background:var(--surface-soft); border-style:dashed;">
-                <strong>{{ ref.nom }}</strong>
-                <div class="muted" style="margin-bottom:6px;">{{ ref.description or '' }}</div>
-                <div class="stack" style="gap:6px;">
-                  {% for comp in ref.competences %}
-                    <label class="row" style="gap:8px; align-items:center;">
-                      <input type="checkbox" name="competence_ids" value="{{ comp.id }}">
-                      <span>{{ comp.code }} · {{ comp.nom }}</span>
-                    </label>
-                  {% else %}
-                    <div class="muted">Aucune compétence dans ce référentiel.</div>
-                  {% endfor %}
-                </div>
-              </div>
+        <div id="fieldAtelier" style="display:none;">
+          <label>Atelier (obligatoire pour OS)</label>
+          <select class="in" name="atelier_id">
+            <option value="">—</option>
+            {% for a in ateliers %}
+              <option value="{{ a.id }}">{{ a.secteur }} · {{ a.nom }}</option>
             {% endfor %}
-          </div>
-        {% else %}
-          <div class="muted">Aucun référentiel configuré.</div>
-        {% endif %}
+          </select>
+        </div>
 
-        <div class="spacer"></div>
+        <div id="fieldModule" style="display:none;">
+          <label>Module pédagogique (obligatoire pour OO)</label>
+          <select class="in" name="module_id">
+            <option value="">—</option>
+            {% for m in modules %}
+              <option value="{{ m.id }}">{{ m.nom }}</option>
+            {% endfor %}
+          </select>
+          <div class="muted">Les compétences d'un OO sont déduites automatiquement du module.</div>
+        </div>
+
+        <details>
+          <summary>Options avancées</summary>
+          <label>Description</label>
+          <textarea class="in" name="description" rows="2"></textarea>
+          <label>Objectif parent (si connu)</label>
+          <select class="in" name="parent_id">
+            <option value="">Aucun</option>
+            {% for obj in parent_options %}
+              <option value="{{ obj.id }}">{{ obj.titre }} ({{ obj.type }})</option>
+            {% endfor %}
+          </select>
+        </details>
+
         <button class="btn ok" type="submit">Créer l'objectif</button>
       </form>
     </div>
@@ -132,28 +91,18 @@
       <h2 style="margin-top:0;">Objectifs existants</h2>
       <div class="tablewrap">
         <table>
-          <thead>
-            <tr>
-              <th>Type</th>
-              <th>Titre</th>
-              <th>Seuil</th>
-              <th>Rattachements</th>
-              <th>Parent</th>
-              <th></th>
-            </tr>
-          </thead>
+          <thead><tr><th>Type</th><th>Titre</th><th>Projet/Atelier/Module</th><th>Parent</th><th></th></tr></thead>
           <tbody>
             {% for obj in objectifs %}
               <tr>
                 <td><span class="badge">{{ obj.type }}</span></td>
-                <td><strong>{{ obj.titre }}</strong><div class="muted">{{ obj.description or '' }}</div></td>
-                <td>{{ obj.seuil_validation|round(0) }}%</td>
+                <td><strong>{{ obj.titre }}</strong></td>
                 <td class="muted">
                   {% if obj.projet %}Projet : {{ obj.projet.nom }}<br>{% endif %}
                   {% if obj.atelier %}Atelier : {{ obj.atelier.nom }}<br>{% endif %}
-                  {% if obj.session %}Session : {{ obj.session.date_session or obj.session.rdv_date }}{% endif %}
+                  {% if obj.module %}Module : {{ obj.module.nom }}{% endif %}
                 </td>
-                <td class="muted">{{ obj.parent.titre if obj.parent else '—' }}</td>
+                <td>{{ obj.parent.titre if obj.parent else '—' }}</td>
                 <td>
                   <form method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -164,11 +113,28 @@
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="6" class="muted">Aucun objectif.</td></tr>
+              <tr><td colspan="5" class="muted">Aucun objectif.</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
     </div>
   </div>
+
+  <script>
+    (() => {
+      const typeSel = document.getElementById('objType');
+      const p = document.getElementById('fieldProjet');
+      const a = document.getElementById('fieldAtelier');
+      const m = document.getElementById('fieldModule');
+      function refresh() {
+        const t = typeSel.value;
+        p.style.display = t === 'general' ? 'block' : 'none';
+        a.style.display = t === 'specifique' ? 'block' : 'none';
+        m.style.display = t === 'operationnel' ? 'block' : 'none';
+      }
+      typeSel.addEventListener('change', refresh);
+      refresh();
+    })();
+  </script>
 {% endblock %}

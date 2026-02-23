@@ -17,10 +17,14 @@ from app.models import (
     PresenceActivite,
     Quartier,
     Referentiel,
+    Competence,
     AtelierCapaciteMois,
     ArchiveEmargement,
     Evaluation,
     Objectif,
+    PedagogieModule,
+    PlanProjetAtelierModule,
+    Projet,
 )
 
 from . import bp
@@ -644,15 +648,15 @@ def session_new(atelier_id: int):
             rdv_fin = (request.form.get("rdv_fin") or "").strip() or None
             if not rdv_date:
                 flash("Date RDV obligatoire.", "danger")
-                referentiels = _load_referentiels()
-                selected_competences = {c.id for c in atelier.competences}
+                modules = PedagogieModule.query.filter(PedagogieModule.actif.is_(True)).order_by(PedagogieModule.nom.asc()).all()
                 return render_template(
                     "activite/session_form.html",
                     secteur=secteur,
                     atelier=atelier,
                     session=None,
-                    referentiels=referentiels,
-                    selected_competences=selected_competences,
+                    modules=modules,
+                    projets_atelier=[],
+                    projet_id=None,
                 )
             rdv_date_obj = datetime.strptime(rdv_date, "%Y-%m-%d").date()
             s = SessionActivite(
@@ -671,15 +675,15 @@ def session_new(atelier_id: int):
             capacite = request.form.get("capacite") or atelier.capacite_defaut
             if not date_session:
                 flash("Date de session obligatoire.", "danger")
-                referentiels = _load_referentiels()
-                selected_competences = {c.id for c in atelier.competences}
+                modules = PedagogieModule.query.filter(PedagogieModule.actif.is_(True)).order_by(PedagogieModule.nom.asc()).all()
                 return render_template(
                     "activite/session_form.html",
                     secteur=secteur,
                     atelier=atelier,
                     session=None,
-                    referentiels=referentiels,
-                    selected_competences=selected_competences,
+                    modules=modules,
+                    projets_atelier=[],
+                    projet_id=None,
                 )
             date_obj = datetime.strptime(date_session, "%Y-%m-%d").date()
             s = SessionActivite(
@@ -692,27 +696,94 @@ def session_new(atelier_id: int):
                 capacite=int(capacite) if capacite else None,
             )
 
-        competence_ids = [int(cid) for cid in request.form.getlist("competence_ids") if cid.isdigit()]
-        if competence_ids:
-            s.competences = Competence.query.filter(Competence.id.in_(competence_ids)).all()
-        else:
-            s.competences = []
+        module_ids = [int(mid) for mid in request.form.getlist("module_ids") if mid.isdigit()]
+        modules = PedagogieModule.query.filter(PedagogieModule.id.in_(module_ids), PedagogieModule.actif.is_(True)).all() if module_ids else []
+
+        competence_ids = set()
+        for mod in modules:
+            for comp in mod.competences:
+                competence_ids.add(comp.id)
+
+        s.competences = Competence.query.filter(Competence.id.in_(list(competence_ids))).all() if competence_ids else []
+        s.modules = modules
 
         db.session.add(s)
         db.session.commit()
         flash("Session créée.", "success")
         return redirect(url_for("activite.emargement", session_id=s.id))
 
-    referentiels = _load_referentiels()
-    selected_competences = {c.id for c in atelier.competences}
+    projet_id = request.args.get("projet_id", type=int)
+    projets_atelier = Projet.query.join(PlanProjetAtelierModule, PlanProjetAtelierModule.projet_id == Projet.id).filter(PlanProjetAtelierModule.atelier_id == atelier.id).distinct().order_by(Projet.nom.asc()).all()
+
+    if projet_id:
+        modules = PedagogieModule.query.join(PlanProjetAtelierModule, PlanProjetAtelierModule.module_id == PedagogieModule.id).filter(
+            PlanProjetAtelierModule.atelier_id == atelier.id,
+            PlanProjetAtelierModule.projet_id == projet_id,
+            PedagogieModule.actif.is_(True),
+        ).order_by(PedagogieModule.nom.asc()).all()
+    else:
+        modules = PedagogieModule.query.join(PlanProjetAtelierModule, PlanProjetAtelierModule.module_id == PedagogieModule.id).filter(
+            PlanProjetAtelierModule.atelier_id == atelier.id,
+            PedagogieModule.actif.is_(True),
+        ).distinct().order_by(PedagogieModule.nom.asc()).all()
+
     return render_template(
         "activite/session_form.html",
         secteur=secteur,
         atelier=atelier,
         session=None,
-        referentiels=referentiels,
-        selected_competences=selected_competences,
+        modules=modules,
+        projets_atelier=projets_atelier,
+        projet_id=projet_id,
     )
+
+
+@bp.route("/session/<int:session_id>/evaluation_batch", methods=["GET", "POST"])
+@login_required
+def evaluation_batch(session_id: int):
+    secteur = _user_secteur()
+    s = SessionActivite.query.get_or_404(session_id)
+    atelier = AtelierActivite.query.get_or_404(s.atelier_id)
+    if s.is_deleted or atelier.is_deleted:
+        flash("Cette session/atelier est dans la corbeille.", "warning")
+        return redirect(url_for("activite.sessions", atelier_id=atelier.id, corbeille=1))
+    if not _is_admin_global() and s.secteur != secteur:
+        flash("Accès refusé.", "danger")
+        return redirect(url_for("activite.index"))
+
+    presences = PresenceActivite.query.filter_by(session_id=session_id).all()
+    participants = [p.participant for p in presences]
+    competences = list(s.competences)
+
+    if request.method == "POST":
+        eval_date = s.rdv_date or s.date_session or date.today()
+        updates = 0
+        for participant in participants:
+            for comp in competences:
+                key = f"etat_{participant.id}_{comp.id}"
+                raw = request.form.get(key)
+                if raw is None or raw == "":
+                    continue
+                try:
+                    etat_value = int(raw)
+                except ValueError:
+                    continue
+                ev = Evaluation.query.filter_by(participant_id=participant.id, competence_id=comp.id, session_id=s.id).first()
+                if not ev:
+                    ev = Evaluation(participant_id=participant.id, competence_id=comp.id, session_id=s.id, user_id=current_user.id, etat=etat_value, date_evaluation=eval_date)
+                    db.session.add(ev)
+                else:
+                    ev.etat = etat_value
+                    ev.user_id = current_user.id
+                    ev.date_evaluation = eval_date
+                updates += 1
+        db.session.commit()
+        flash(f"{updates} évaluations enregistrées.", "success")
+        return redirect(url_for("activite.evaluation_batch", session_id=s.id))
+
+    existing = Evaluation.query.filter_by(session_id=s.id).all()
+    eval_map = {(e.participant_id, e.competence_id): e.etat for e in existing}
+    return render_template("activite/evaluation_batch.html", session=s, atelier=atelier, participants=participants, competences=competences, eval_map=eval_map)
 
 
 @bp.route("/session/<int:session_id>/emargement", methods=["GET", "POST"])
