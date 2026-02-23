@@ -211,7 +211,7 @@ def bilans_lourds():
         f"{stats['activite'].get('nb_participants_uniques', 0)} participants uniques, dont {stats['activite'].get('nb_participants_retour', 0)} reviennent au moins 2 fois ({stats['activite'].get('taux_fidelisation', 0)}%).",
         f"Intensité moyenne d'accompagnement : {stats['activite'].get('intensite_accompagnement', 0)} séance(s) par participant.",
         f"Taux de remplissage collectif : {stats['activite'].get('taux_remplissage_collectif', 0)}% et {stats['activite'].get('nb_rdv', 0)} RDV individuels ({stats['activite'].get('minutes_rdv', 0)} min).",
-        f"{stats['evaluations'].get('total', 0)} évaluations réalisées sur {stats['evaluations'].get('nb_competences_uniques', 0)} compétence(s) unique(s).",
+        f"{stats['evaluations'].get('total', 0)} participant(s) évalué(s) sur {stats['evaluations'].get('nb_competences_uniques', 0)} compétence(s) unique(s) ({stats['evaluations'].get('total_items', 0)} items d'évaluation).",
     ]
 
     return render_template(
@@ -270,7 +270,8 @@ def bilans_lourds_export_docx():
 
     doc.add_heading("Résultats pédagogiques", level=2)
     evaluations = stats.get("evaluations", {})
-    doc.add_paragraph(f"- Évaluations : {evaluations.get('total', 0)}")
+    doc.add_paragraph(f"- Participants évalués : {evaluations.get('total', 0)}")
+    doc.add_paragraph(f"- Items d'évaluation : {evaluations.get('total_items', 0)}")
     doc.add_paragraph(f"- Compétences évaluées : {evaluations.get('nb_competences_uniques', 0)}")
     for label, nb in evaluations.get("par_etat", []):
         doc.add_paragraph(f"  • {label} : {nb}")

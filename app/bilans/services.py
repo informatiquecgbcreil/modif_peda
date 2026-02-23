@@ -680,31 +680,44 @@ def _compute_bilans_lourds_core(year: int, scope: BilansScope) -> dict:
     intensite_accompagnement = round((nb_presences / nb_participants_uniques), 2) if nb_participants_uniques > 0 else 0.0
 
     # collectif : remplissage (présences / total places)
-    q_total_places = db.session.query(func.sum(SessionActivite.capacite)).filter(
+    # NOTE: on cappe le numérateur par session à la capacité pour éviter des taux absurdes (>100%)
+    # dus aux sur-bookings ponctuels, erreurs de capacité ou imports historiques.
+    q_coll_sessions = db.session.query(SessionActivite.id, SessionActivite.capacite).filter(
         SessionActivite.is_deleted.is_(False),
         SessionActivite.statut == "realisee",
         SessionActivite.session_type == "COLLECTIF",
         SessionActivite.date_session >= start,
         SessionActivite.date_session < end,
     )
-    q_total_places = _apply_secteur_filter(q_total_places, scope, SessionActivite.secteur)
-    total_places_collectif = int(q_total_places.scalar() or 0)
+    q_coll_sessions = _apply_secteur_filter(q_coll_sessions, scope, SessionActivite.secteur)
+    coll_sessions = q_coll_sessions.all()
+    coll_session_ids = [sid for sid, _cap in coll_sessions]
 
-    q_pres_coll = db.session.query(func.count(PresenceActivite.id)).join(
-        SessionActivite, PresenceActivite.session_id == SessionActivite.id
-    ).filter(
-        SessionActivite.is_deleted.is_(False),
-        SessionActivite.statut == "realisee",
-        SessionActivite.session_type == "COLLECTIF",
-        SessionActivite.date_session >= start,
-        SessionActivite.date_session < end,
-    )
-    q_pres_coll = _apply_secteur_filter(q_pres_coll, scope, SessionActivite.secteur)
-    nb_presences_collectif = int(q_pres_coll.scalar() or 0)
+    if coll_session_ids:
+        pres_rows = (
+            db.session.query(PresenceActivite.session_id, func.count(PresenceActivite.id))
+            .filter(PresenceActivite.session_id.in_(coll_session_ids))
+            .group_by(PresenceActivite.session_id)
+            .all()
+        )
+    else:
+        pres_rows = []
+    pres_by_session = {sid: int(cnt or 0) for sid, cnt in pres_rows}
+
+    total_places_collectif = 0
+    nb_presences_collectif = 0
+    nb_presences_collectif_capped = 0
+    for sid, cap in coll_sessions:
+        pres_count = int(pres_by_session.get(sid, 0))
+        nb_presences_collectif += pres_count
+        cap_value = int(cap or 0)
+        if cap_value > 0:
+            total_places_collectif += cap_value
+            nb_presences_collectif_capped += min(pres_count, cap_value)
 
     taux_remplissage_collectif = 0
     if total_places_collectif > 0:
-        taux_remplissage_collectif = int(round((nb_presences_collectif / total_places_collectif) * 100))
+        taux_remplissage_collectif = int(round((nb_presences_collectif_capped / total_places_collectif) * 100))
 
     # rdv individuel : nb + minutes
     q_rdv = db.session.query(func.count(SessionActivite.id)).filter(
@@ -728,35 +741,31 @@ def _compute_bilans_lourds_core(year: int, scope: BilansScope) -> dict:
     minutes_rdv = int(q_rdv_min.scalar() or 0)
 
     # évaluations (sur l'année)
-    q_eval = db.session.query(func.count(Evaluation.id)).filter(
-        Evaluation.date_evaluation >= start,
-        Evaluation.date_evaluation < end,
+    # On compte uniquement les évaluations rattachées à une session réelle du périmètre,
+    # pour éviter le bruit des évaluations legacy sans session (session_id NULL) qui gonfle les bilans.
+    base_eval = db.session.query(Evaluation.id, Evaluation.etat, Evaluation.competence_id, Evaluation.participant_id, Evaluation.session_id).join(
+        SessionActivite, Evaluation.session_id == SessionActivite.id
+    ).filter(
+        SessionActivite.is_deleted.is_(False),
+        SessionActivite.statut == "realisee",
+        func.coalesce(SessionActivite.date_session, SessionActivite.rdv_date) >= start,
+        func.coalesce(SessionActivite.date_session, SessionActivite.rdv_date) < end,
     )
-    # Filtre secteur: on passe par participant.secteur si présent, sinon via session.secteur.
-    # Ici, on fait simple : si périmètre restrictif, on garde les évaluations dont le participant appartient au secteur.
-    if scope.secteurs is not None:
-        q_eval = q_eval.join(Participant, Evaluation.participant_id == Participant.id).filter(Participant.created_secteur.in_(scope.secteurs))
-    total_eval = int(q_eval.scalar() or 0)
+    base_eval = _apply_secteur_filter(base_eval, scope, SessionActivite.secteur)
 
-    # évaluations par état
+    total_eval_items = int(base_eval.with_entities(func.count(Evaluation.id)).scalar() or 0)
+
+    # nombre de participants évalués (distinct participant x session)
+    eval_pairs_subq = base_eval.with_entities(Evaluation.session_id.label("session_id"), Evaluation.participant_id.label("participant_id")).distinct().subquery()
+    total_eval = int(db.session.query(func.count()).select_from(eval_pairs_subq).scalar() or 0)
+
+    # évaluations par état (volume d'items compétences)
     par_etat = []
     for etat in (0, 1, 2, 3):
-        q = db.session.query(func.count(Evaluation.id)).filter(
-            Evaluation.date_evaluation >= start,
-            Evaluation.date_evaluation < end,
-            Evaluation.etat == etat,
-        )
-        if scope.secteurs is not None:
-            q = q.join(Participant, Evaluation.participant_id == Participant.id).filter(Participant.created_secteur.in_(scope.secteurs))
-        par_etat.append((_ETAT_LABELS.get(etat, str(etat)), int(q.scalar() or 0)))
+        q = base_eval.filter(Evaluation.etat == etat)
+        par_etat.append((_ETAT_LABELS.get(etat, str(etat)), int(q.with_entities(func.count(Evaluation.id)).scalar() or 0)))
 
-    q_comp_u = db.session.query(func.count(func.distinct(Evaluation.competence_id))).filter(
-        Evaluation.date_evaluation >= start,
-        Evaluation.date_evaluation < end,
-    )
-    if scope.secteurs is not None:
-        q_comp_u = q_comp_u.join(Participant, Evaluation.participant_id == Participant.id).filter(Participant.created_secteur.in_(scope.secteurs))
-    nb_comp_u = int(q_comp_u.scalar() or 0)
+    nb_comp_u = int(base_eval.with_entities(func.count(func.distinct(Evaluation.competence_id))).scalar() or 0)
 
     # détail par secteur (dans le périmètre)
     secteurs = scope.secteurs if scope.secteurs is not None else list_secteurs(year, scope)
@@ -810,6 +819,7 @@ def _compute_bilans_lourds_core(year: int, scope: BilansScope) -> dict:
         },
         "evaluations": {
             "total": total_eval,
+            "total_items": total_eval_items,
             "par_etat": par_etat,
             "nb_competences_uniques": nb_comp_u,
         },

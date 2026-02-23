@@ -53,7 +53,7 @@
       <div class="muted" style="font-size:12px;">vs N-1 : {% if deltas.participants_uniques is not none %}{{ deltas.participants_uniques }}%{% else %}N/A{% endif %}</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">Évaluations</div>
+      <div class="kpi-label">Participants évalués</div>
       <div class="kpi-value">{{ stats.evaluations.total }}</div>
       <div class="muted" style="font-size:12px;">vs N-1 : {% if deltas.evaluations is not none %}{{ deltas.evaluations }}%{% else %}N/A{% endif %}</div>
     </div>
@@ -87,8 +87,9 @@
     <h3>Résultats pédagogiques</h3>
     <div class="grid two">
       <div>
-        <p class="muted">Évaluations réalisées</p>
+        <p class="muted">Participants évalués</p>
         <h2>{{ stats.evaluations.total }}</h2>
+        <div class="muted" style="font-size:12px;">{{ stats.evaluations.total_items }} items d'évaluation</div>
       </div>
       <div>
         <p class="muted">Compétences évaluées</p>
@@ -97,7 +98,7 @@
     </div>
     <hr>
     <table class="table">
-      <thead><tr><th>État</th><th style="text-align:right;">Volume</th></tr></thead>
+      <thead><tr><th>État (items compétences)</th><th style="text-align:right;">Volume</th></tr></thead>
       <tbody>
         {% for label, nb in stats.evaluations.par_etat %}
           <tr><td>{{ label }}</td><td style="text-align:right;">{{ nb }}</td></tr>
