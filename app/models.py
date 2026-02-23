@@ -218,6 +218,77 @@ objectif_competence = db.Table(
     db.Column("competence_id", db.Integer, db.ForeignKey("competence.id"), primary_key=True),
 )
 
+module_competence = db.Table(
+    "module_competence",
+    db.Column("module_id", db.Integer, db.ForeignKey("pedagogie_module.id"), primary_key=True),
+    db.Column("competence_id", db.Integer, db.ForeignKey("competence.id"), primary_key=True),
+)
+
+atelier_module = db.Table(
+    "atelier_module",
+    db.Column("atelier_id", db.Integer, db.ForeignKey("atelier_activite.id"), primary_key=True),
+    db.Column("module_id", db.Integer, db.ForeignKey("pedagogie_module.id"), primary_key=True),
+)
+
+session_module = db.Table(
+    "session_module",
+    db.Column("session_id", db.Integer, db.ForeignKey("session_activite.id"), primary_key=True),
+    db.Column("module_id", db.Integer, db.ForeignKey("pedagogie_module.id"), primary_key=True),
+)
+
+
+class PedagogieModule(db.Model):
+    __tablename__ = "pedagogie_module"
+    id = db.Column(db.Integer, primary_key=True)
+    nom = db.Column(db.String(160), nullable=False, unique=True, index=True)
+    description = db.Column(db.Text, nullable=True)
+    actif = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    competences = db.relationship(
+        "Competence",
+        secondary=module_competence,
+        backref=db.backref("modules", lazy="dynamic"),
+    )
+
+
+class ObjectifCompetenceMap(db.Model):
+    __tablename__ = "objectif_competence_map"
+
+    id = db.Column(db.Integer, primary_key=True)
+    objectif_id = db.Column(db.Integer, db.ForeignKey("objectif.id", ondelete="CASCADE"), nullable=False, index=True)
+    competence_id = db.Column(db.Integer, db.ForeignKey("competence.id", ondelete="CASCADE"), nullable=False, index=True)
+    poids = db.Column(db.Float, nullable=False, default=1.0)
+    actif = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    objectif = db.relationship("Objectif")
+    competence = db.relationship("Competence")
+
+    __table_args__ = (
+        db.UniqueConstraint("objectif_id", "competence_id", name="uq_objectif_competence_map"),
+    )
+
+
+
+
+class PlanProjetAtelierModule(db.Model):
+    __tablename__ = "plan_projet_atelier_module"
+
+    id = db.Column(db.Integer, primary_key=True)
+    projet_id = db.Column(db.Integer, db.ForeignKey("projet.id", ondelete="CASCADE"), nullable=False, index=True)
+    atelier_id = db.Column(db.Integer, db.ForeignKey("atelier_activite.id", ondelete="CASCADE"), nullable=False, index=True)
+    module_id = db.Column(db.Integer, db.ForeignKey("pedagogie_module.id", ondelete="CASCADE"), nullable=False, index=True)
+    actif = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    projet = db.relationship("Projet")
+    atelier = db.relationship("AtelierActivite")
+    module = db.relationship("PedagogieModule")
+
+    __table_args__ = (
+        db.UniqueConstraint("projet_id", "atelier_id", "module_id", name="uq_plan_projet_atelier_module"),
+    )
 
 class Objectif(db.Model):
     __tablename__ = "objectif"
@@ -231,6 +302,7 @@ class Objectif(db.Model):
     projet_id = db.Column(db.Integer, db.ForeignKey("projet.id"), nullable=True)
     atelier_id = db.Column(db.Integer, db.ForeignKey("atelier_activite.id"), nullable=True)
     session_id = db.Column(db.Integer, db.ForeignKey("session_activite.id"), nullable=True)
+    module_id = db.Column(db.Integer, db.ForeignKey("pedagogie_module.id"), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -238,6 +310,7 @@ class Objectif(db.Model):
     projet = db.relationship("Projet")
     atelier = db.relationship("AtelierActivite")
     session = db.relationship("SessionActivite")
+    module = db.relationship("PedagogieModule")
     competences = db.relationship(
         "Competence",
         secondary=objectif_competence,
@@ -903,6 +976,11 @@ class AtelierActivite(db.Model):
         secondary=atelier_competence,
         backref=db.backref("ateliers", lazy="dynamic"),
     )
+    modules = db.relationship(
+        "PedagogieModule",
+        secondary=atelier_module,
+        backref=db.backref("ateliers", lazy="dynamic"),
+    )
 
     def motifs(self):
         try:
@@ -946,6 +1024,11 @@ class SessionActivite(db.Model):
     competences = db.relationship(
         "Competence",
         secondary=session_competence,
+        backref=db.backref("sessions", lazy="dynamic"),
+    )
+    modules = db.relationship(
+        "PedagogieModule",
+        secondary=session_module,
         backref=db.backref("sessions", lazy="dynamic"),
     )
 
