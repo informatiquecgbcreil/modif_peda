@@ -4,77 +4,47 @@
   <div class="stack">
     <div class="card">
       <h1 style="margin-top:0;">Nouvelle session · {{ atelier.nom }}</h1>
+      <form method="get" class="inline" style="gap:8px;">
+        <input type="hidden" name="atelier_id" value="{{ atelier.id }}">
+        <label>Projet (pour filtrer les modules autorisés)</label>
+        <select class="in" name="projet_id" onchange="this.form.submit()">
+          <option value="">Tous les projets liés</option>
+          {% for p in projets_atelier|default([]) %}
+            <option value="{{ p.id }}" {% if projet_id == p.id %}selected{% endif %}>{{ p.nom }}</option>
+          {% endfor %}
+        </select>
+      </form>
+
       <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         {% if atelier.type_atelier == 'INDIVIDUEL_MENSUEL' %}
           <div class="grid" style="grid-template-columns:1fr 1fr 1fr; gap:12px;">
-            <div>
-              <label>Date RDV</label>
-              <input class="in" type="date" name="rdv_date" required>
-            </div>
-            <div>
-              <label>Heure début</label>
-              <input class="in" type="text" name="rdv_debut" placeholder="09:00">
-            </div>
-            <div>
-              <label>Heure fin</label>
-              <input class="in" type="text" name="rdv_fin" placeholder="09:45">
-            </div>
+            <div><label>Date RDV</label><input class="in" type="date" name="rdv_date" required></div>
+            <div><label>Heure début</label><input class="in" type="text" name="rdv_debut" placeholder="09:00"></div>
+            <div><label>Heure fin</label><input class="in" type="text" name="rdv_fin" placeholder="09:45"></div>
           </div>
-          <div class="muted">Une fois créé, tu émarges 1 personne (1 ligne). La feuille mensuelle se met à jour automatiquement.</div>
         {% else %}
           <div class="grid" style="grid-template-columns:1fr 1fr 1fr 1fr; gap:12px;">
-            <div>
-              <label>Date session</label>
-              <input class="in" type="date" name="date_session" required>
-            </div>
-            <div>
-              <label>Heure début</label>
-              <input class="in" type="text" name="heure_debut" placeholder="14:00">
-            </div>
-            <div>
-              <label>Heure fin</label>
-              <input class="in" type="text" name="heure_fin" placeholder="16:00">
-            </div>
-            <div>
-              <label>Capacité (override)</label>
-              <input class="in" type="number" name="capacite" value="{{ atelier.capacite_defaut or '' }}" min="0">
-            </div>
+            <div><label>Date session</label><input class="in" type="date" name="date_session" required></div>
+            <div><label>Heure début</label><input class="in" type="text" name="heure_debut" placeholder="14:00"></div>
+            <div><label>Heure fin</label><input class="in" type="text" name="heure_fin" placeholder="16:00"></div>
+            <div><label>Capacité</label><input class="in" type="number" name="capacite" value="{{ atelier.capacite_defaut or '' }}" min="0"></div>
           </div>
-          <div class="muted">Par défaut la session reprend la capacité de l’atelier (modifiable ici si besoin).</div>
         {% endif %}
 
         <div class="spacer"></div>
-        <h3 style="margin:0;">Préparer les compétences (flux simplifié)</h3>
-        <div class="grid" style="grid-template-columns:1fr 1fr; gap:12px;">
-          <div>
-            <label>Modules pédagogiques (packs)</label>
-            <select class="in" name="module_ids" id="module_ids" multiple size="6">
-              {% for mod in modules|default([]) %}
-                <option value="{{ mod.id }}" data-comp-ids="{{ mod.competences|map(attribute='id')|join(',') }}">{{ mod.nom }}</option>
-              {% endfor %}
-            </select>
-            <div class="muted">Sélectionne un ou plusieurs modules pour pré-cocher automatiquement les compétences.</div>
-          </div>
-          <div>
-            <label>Compétences sélectionnées</label>
-            <div class="card" style="max-height:240px; overflow:auto;">
-              {% for ref in referentiels %}
-                <div style="margin-bottom:8px;"><strong>{{ ref.nom }}</strong></div>
-                {% for comp in ref.competences %}
-                  <label style="display:block; margin-bottom:4px;">
-                    <input type="checkbox" name="competence_ids" value="{{ comp.id }}" {% if comp.id in selected_competences %}checked{% endif %}> {{ comp.code }} · {{ comp.nom }}
-                  </label>
-                {% else %}
-                  <div class="muted">Aucune compétence.</div>
-                {% endfor %}
-              {% endfor %}
-            </div>
-          </div>
-        </div>
+        <label>Module(s) de session (obligatoire)</label>
+        <select class="in" name="module_ids" multiple size="8" required>
+          {% for mod in modules|default([]) %}
+            <option value="{{ mod.id }}">{{ mod.nom }} ({{ mod.competences|length }} compétences)</option>
+          {% else %}
+            <option disabled>Aucun module autorisé pour cet atelier/projet</option>
+          {% endfor %}
+        </select>
+        <div class="muted">Le terrain ne sélectionne plus les compétences manuellement : elles sont déduites automatiquement des modules.</div>
 
-        <div class="row" style="gap:10px; flex-wrap:wrap;">
+        <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:10px;">
           <button class="btn" type="submit">Créer</button>
           <a class="btn" href="{{ url_for('activite.sessions', atelier_id=atelier.id) }}">Annuler</a>
         </div>

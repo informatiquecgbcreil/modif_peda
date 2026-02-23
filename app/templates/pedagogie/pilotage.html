@@ -20,7 +20,7 @@
   <div class="card">
     <div class="tablewrap">
       <table>
-        <thead><tr><th>Type</th><th>Objectif</th><th>Projet</th><th>% atteinte</th><th>Évaluations</th><th>Participants</th></tr></thead>
+        <thead><tr><th>Type</th><th>Objectif</th><th>Projet</th><th>% atteinte</th><th>Évaluations</th><th>Participants</th><th>Progression moy.</th></tr></thead>
         <tbody>
           {% for row in rows %}
             <tr>
@@ -30,9 +30,10 @@
               <td>{{ row.score if row.score is not none else '—' }}</td>
               <td>{{ row.evaluations }}</td>
               <td>{{ row.participants }}</td>
+              <td>{{ row.progression_moyenne if row.progression_moyenne is not none else "—" }}</td>
             </tr>
           {% else %}
-            <tr><td colspan="6" class="muted">Aucune donnée.</td></tr>
+            <tr><td colspan="7" class="muted">Aucune donnée.</td></tr>
           {% endfor %}
         </tbody>
       </table>

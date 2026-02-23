@@ -20,6 +20,7 @@ from app.models import (
     ProjetAtelier,
     ObjectifCompetenceMap,
     PedagogieModule,
+    PlanProjetAtelierModule,
 )
 from .services import compute_objectif_scores, participant_timeline
 
@@ -53,6 +54,7 @@ def referentiels_list():
             return redirect(url_for("pedagogie.referentiels_list"))
 
     referentiels = Referentiel.query.order_by(Referentiel.nom.asc()).all()
+    modules = PedagogieModule.query.filter(PedagogieModule.actif.is_(True)).order_by(PedagogieModule.nom.asc()).all()
     return render_template("pedagogie/referentiels.html", referentiels=referentiels)
 
 
@@ -133,7 +135,7 @@ def modules_pedagogiques():
             return redirect(url_for("pedagogie.modules_pedagogiques"))
 
     referentiels = Referentiel.query.order_by(Referentiel.nom.asc()).all()
-    modules = PedagogieModule.query.order_by(PedagogieModule.nom.asc()).all()
+    modules = PedagogieModule.query.filter(PedagogieModule.actif.is_(True)).order_by(PedagogieModule.nom.asc()).all()
     return render_template("pedagogie/modules.html", referentiels=referentiels, modules=modules)
 
 
@@ -153,13 +155,33 @@ def objectifs():
             description = (request.form.get("description") or "").strip() or None
             seuil_validation = request.form.get("seuil_validation", type=float) or 0.0
             parent_id = request.form.get("parent_id", type=int)
-            selected_session_id = request.form.get("session_id", type=int)
             selected_atelier_id = request.form.get("atelier_id", type=int)
             selected_projet_id = request.form.get("projet_id", type=int)
+            selected_module_id = request.form.get("module_id", type=int)
 
             if not obj_type or not titre:
                 flash("Type et titre obligatoires.", "danger")
                 return redirect(url_for("pedagogie.objectifs", projet_id=projet_id, atelier_id=atelier_id, session_id=session_id))
+
+            # Règles métier simplifiées et strictes
+            if obj_type == "general":
+                if not selected_projet_id:
+                    flash("Un objectif général doit être lié à un projet.", "danger")
+                    return redirect(url_for("pedagogie.objectifs", projet_id=projet_id))
+                selected_atelier_id = None
+                selected_module_id = None
+            elif obj_type == "specifique":
+                if not selected_atelier_id:
+                    flash("Un objectif spécifique doit être lié à un atelier.", "danger")
+                    return redirect(url_for("pedagogie.objectifs", projet_id=projet_id, atelier_id=atelier_id))
+                selected_module_id = None
+            elif obj_type == "operationnel":
+                if not selected_module_id:
+                    flash("Un objectif opérationnel doit être lié à un module pédagogique.", "danger")
+                    return redirect(url_for("pedagogie.objectifs", projet_id=projet_id, atelier_id=atelier_id))
+            else:
+                flash("Type d'objectif invalide.", "danger")
+                return redirect(url_for("pedagogie.objectifs"))
 
             obj = Objectif(
                 type=obj_type,
@@ -169,22 +191,24 @@ def objectifs():
                 parent_id=parent_id,
                 projet_id=selected_projet_id,
                 atelier_id=selected_atelier_id,
-                session_id=selected_session_id,
+                session_id=None,  # session n'est plus un niveau de structuration pédagogique
+                module_id=selected_module_id,
             )
-            competence_ids = [int(cid) for cid in request.form.getlist("competence_ids") if cid.isdigit()]
-            if competence_ids:
-                comps = Competence.query.filter(Competence.id.in_(competence_ids)).all()
-                obj.competences = comps
             db.session.add(obj)
             db.session.commit()
-            if obj.type == "operationnel" and competence_ids:
-                for cid in competence_ids:
-                    existing = ObjectifCompetenceMap.query.filter_by(objectif_id=obj.id, competence_id=cid).first()
-                    if not existing:
-                        db.session.add(ObjectifCompetenceMap(objectif_id=obj.id, competence_id=cid, poids=1.0, actif=True))
-                db.session.commit()
+
+            # Liaisons OO <-> compétences alimentées automatiquement par le module
+            if obj.type == "operationnel" and obj.module_id:
+                mod = PedagogieModule.query.get(obj.module_id)
+                if mod:
+                    for comp in mod.competences:
+                        existing = ObjectifCompetenceMap.query.filter_by(objectif_id=obj.id, competence_id=comp.id).first()
+                        if not existing:
+                            db.session.add(ObjectifCompetenceMap(objectif_id=obj.id, competence_id=comp.id, poids=1.0, actif=True))
+                    db.session.commit()
+
             flash("Objectif ajouté.", "success")
-            return redirect(url_for("pedagogie.objectifs", projet_id=selected_projet_id, atelier_id=selected_atelier_id, session_id=selected_session_id))
+            return redirect(url_for("pedagogie.objectifs", projet_id=selected_projet_id, atelier_id=selected_atelier_id))
 
         if action == "delete_objectif":
             obj_id = int(request.form.get("objectif_id") or 0)
@@ -198,6 +222,7 @@ def objectifs():
     ateliers = AtelierActivite.query.filter(AtelierActivite.is_deleted.is_(False)).order_by(AtelierActivite.nom.asc()).all()
     sessions = SessionActivite.query.filter(SessionActivite.is_deleted.is_(False)).order_by(SessionActivite.created_at.desc()).all()
     referentiels = Referentiel.query.order_by(Referentiel.nom.asc()).all()
+    modules = PedagogieModule.query.filter(PedagogieModule.actif.is_(True)).order_by(PedagogieModule.nom.asc()).all()
 
     objectifs = Objectif.query
     if projet_id:
@@ -216,6 +241,7 @@ def objectifs():
         ateliers=ateliers,
         sessions=sessions,
         referentiels=referentiels,
+        modules=modules,
         objectifs=objectifs,
         parent_options=parent_options,
         projet_id=projet_id,
@@ -366,6 +392,49 @@ def kiosk_pedagogique():
     )
 
 
+
+
+@bp.route("/plan_projet", methods=["GET", "POST"])
+@login_required
+@require_perm("pedagogie:view")
+def plan_projet():
+    if request.method == "POST":
+        action = request.form.get("action") or ""
+        if action == "add_link":
+            projet_id = request.form.get("projet_id", type=int)
+            atelier_id = request.form.get("atelier_id", type=int)
+            module_id = request.form.get("module_id", type=int)
+            if not projet_id or not atelier_id or not module_id:
+                flash("Projet, atelier et module sont obligatoires.", "danger")
+                return redirect(url_for("pedagogie.plan_projet"))
+            row = PlanProjetAtelierModule.query.filter_by(projet_id=projet_id, atelier_id=atelier_id, module_id=module_id).first()
+            if not row:
+                db.session.add(PlanProjetAtelierModule(projet_id=projet_id, atelier_id=atelier_id, module_id=module_id, actif=True))
+                db.session.commit()
+            flash("Lien projet/atelier/module enregistré.", "success")
+            return redirect(url_for("pedagogie.plan_projet", projet_id=projet_id))
+
+        if action == "delete_link":
+            row_id = request.form.get("row_id", type=int)
+            row = PlanProjetAtelierModule.query.get_or_404(row_id)
+            db.session.delete(row)
+            db.session.commit()
+            flash("Lien supprimé.", "warning")
+            return redirect(url_for("pedagogie.plan_projet"))
+
+    projet_id = request.args.get("projet_id", type=int)
+    projets = Projet.query.order_by(Projet.nom.asc()).all()
+    ateliers = AtelierActivite.query.filter(AtelierActivite.is_deleted.is_(False)).order_by(AtelierActivite.nom.asc()).all()
+    modules = PedagogieModule.query.filter(PedagogieModule.actif.is_(True)).order_by(PedagogieModule.nom.asc()).all()
+
+    rows_q = PlanProjetAtelierModule.query
+    if projet_id:
+        rows_q = rows_q.filter(PlanProjetAtelierModule.projet_id == projet_id)
+    rows = rows_q.order_by(PlanProjetAtelierModule.created_at.desc()).all()
+
+    return render_template("pedagogie/plan_projet.html", projets=projets, ateliers=ateliers, modules=modules, rows=rows, projet_id=projet_id)
+
+
 @bp.route("/participant/<int:participant_id>/passeport")
 @login_required
 @require_perm("pedagogie:view")
@@ -407,7 +476,7 @@ def export_ra_csv():
 
     sio = StringIO()
     w = csv.writer(sio)
-    w.writerow(["Projet", "Type objectif", "Objectif", "Score atteinte %", "Nb évaluations", "Nb participants"])
+    w.writerow(["Projet", "Type objectif", "Objectif", "Score atteinte %", "Nb évaluations", "Nb participants", "Progression moyenne"])
     for r in rows:
         obj = r["objectif"]
         w.writerow([
@@ -417,6 +486,7 @@ def export_ra_csv():
             "" if r["score"] is None else r["score"],
             r["evaluations"],
             r["participants"],
+            "" if r["progression_moyenne"] is None else r["progression_moyenne"],
         ])
     return Response(
         sio.getvalue(),

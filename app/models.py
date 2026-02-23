@@ -270,6 +270,26 @@ class ObjectifCompetenceMap(db.Model):
     )
 
 
+
+
+class PlanProjetAtelierModule(db.Model):
+    __tablename__ = "plan_projet_atelier_module"
+
+    id = db.Column(db.Integer, primary_key=True)
+    projet_id = db.Column(db.Integer, db.ForeignKey("projet.id", ondelete="CASCADE"), nullable=False, index=True)
+    atelier_id = db.Column(db.Integer, db.ForeignKey("atelier_activite.id", ondelete="CASCADE"), nullable=False, index=True)
+    module_id = db.Column(db.Integer, db.ForeignKey("pedagogie_module.id", ondelete="CASCADE"), nullable=False, index=True)
+    actif = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    projet = db.relationship("Projet")
+    atelier = db.relationship("AtelierActivite")
+    module = db.relationship("PedagogieModule")
+
+    __table_args__ = (
+        db.UniqueConstraint("projet_id", "atelier_id", "module_id", name="uq_plan_projet_atelier_module"),
+    )
+
 class Objectif(db.Model):
     __tablename__ = "objectif"
     id = db.Column(db.Integer, primary_key=True)
@@ -282,6 +302,7 @@ class Objectif(db.Model):
     projet_id = db.Column(db.Integer, db.ForeignKey("projet.id"), nullable=True)
     atelier_id = db.Column(db.Integer, db.ForeignKey("atelier_activite.id"), nullable=True)
     session_id = db.Column(db.Integer, db.ForeignKey("session_activite.id"), nullable=True)
+    module_id = db.Column(db.Integer, db.ForeignKey("pedagogie_module.id"), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -289,6 +310,7 @@ class Objectif(db.Model):
     projet = db.relationship("Projet")
     atelier = db.relationship("AtelierActivite")
     session = db.relationship("SessionActivite")
+    module = db.relationship("PedagogieModule")
     competences = db.relationship(
         "Competence",
         secondary=objectif_competence,
