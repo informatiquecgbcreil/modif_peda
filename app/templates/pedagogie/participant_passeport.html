@@ -35,7 +35,9 @@
         <div class="spacer"></div>
         <label>Catégorie</label>
         <select class="in" name="categorie">
-          <option value="journal">Journal</option><option value="participation">Participation</option><option value="progression">Progression</option><option value="temoignage">Témoignage</option>
+          {% for cat, label in note_categories.items() %}
+            <option value="{{ cat }}">{{ label }}</option>
+          {% endfor %}
         </select>
         <div class="spacer"></div>
         <button class="btn ok" type="submit">Enregistrer</button>
@@ -45,13 +47,41 @@
       <form method="get" class="row" style="gap:8px;align-items:end;">
         <input type="hidden" name="secteur" value="{{ sec }}">
         <div><label>Filtre catégorie</label>
-          <select class="in" name="categorie"><option value="">Toutes</option>{% for cat,nb in notes_by_cat.items() %}<option value="{{ cat }}" {% if selected_categorie==cat %}selected{% endif %}>{{ cat }} ({{ nb }})</option>{% endfor %}</select>
+          <select class="in" name="categorie"><option value="">Toutes</option>{% for cat,nb in notes_by_cat.items() %}<option value="{{ cat }}" {% if selected_categorie==cat %}selected{% endif %}>{{ note_categories.get(cat, cat) }} ({{ nb }})</option>{% endfor %}</select>
         </div>
         <button class="btn" type="submit">Filtrer</button>
       </form>
       <ul>
-        {% for n in notes %}<li><strong>{{ n.created_at.date() if n.created_at else '' }}</strong> · {{ n.categorie }} — {{ n.contenu }}</li>{% else %}<li class="muted">Aucune note.</li>{% endfor %}
+        {% for n in notes %}
+          <li style="margin-bottom:8px;">
+            <strong>{{ n.created_at.date() if n.created_at else '' }}</strong> · {{ note_categories.get(n.categorie, n.categorie) }}
+            <form method="post" action="{{ url_for('pedagogie.participant_passeport_note_update', participant_id=participant.id, note_id=n.id) }}" style="margin-top:6px;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="row" style="gap:8px;">
+                <select class="in" name="categorie" style="max-width:190px;">
+                  {% for cat, label in note_categories.items() %}
+                    <option value="{{ cat }}" {% if n.categorie==cat %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                <input class="in" name="contenu" value="{{ n.contenu }}">
+                <button class="btn" type="submit">Mettre à jour</button>
+              </div>
+            </form>
+            <form method="post" action="{{ url_for('pedagogie.participant_passeport_note_delete', participant_id=participant.id, note_id=n.id) }}" onsubmit="return confirm('Supprimer cette note ?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn" type="submit">Supprimer</button>
+            </form>
+          </li>
+        {% else %}
+          <li class="muted">Aucune note.</li>
+        {% endfor %}
       </ul>
+      {% if notes_total > page_size %}
+        <div class="row" style="gap:8px; flex-wrap:wrap;">
+          {% if notes_page > 1 %}<a class="btn" href="{{ url_for('pedagogie.participant_passeport', participant_id=participant.id, secteur=sec, categorie=selected_categorie, notes_page=notes_page-1, files_page=files_page) }}">← Notes précédentes</a>{% endif %}
+          {% if notes_page * page_size < notes_total %}<a class="btn" href="{{ url_for('pedagogie.participant_passeport', participant_id=participant.id, secteur=sec, categorie=selected_categorie, notes_page=notes_page+1, files_page=files_page) }}">Notes suivantes →</a>{% endif %}
+        </div>
+      {% endif %}
     </div>
 
     <div class="card">
@@ -70,9 +100,17 @@
       <ul>
         {% for f in files %}<li>{{ f.titre or f.original_name }} · <a href="{{ url_for('pedagogie.participant_passeport_file_download', participant_id=participant.id, file_id=f.id) }}">Télécharger</a></li>{% else %}<li class="muted">Aucune pièce jointe.</li>{% endfor %}
       </ul>
+      {% if files_total > page_size %}
+        <div class="row" style="gap:8px; flex-wrap:wrap;">
+          {% if files_page > 1 %}<a class="btn" href="{{ url_for('pedagogie.participant_passeport', participant_id=participant.id, secteur=sec, categorie=selected_categorie, notes_page=notes_page, files_page=files_page-1) }}">← Fichiers précédents</a>{% endif %}
+          {% if files_page * page_size < files_total %}<a class="btn" href="{{ url_for('pedagogie.participant_passeport', participant_id=participant.id, secteur=sec, categorie=selected_categorie, notes_page=notes_page, files_page=files_page+1) }}">Fichiers suivants →</a>{% endif %}
+        </div>
+      {% endif %}
     </div>
   </div>
 
+  {% set sec = selected_secteur if selected_secteur else sectors[0] %}
+  {% set s = summary.get(sec, {}) %}
   <div class="card">
     <h2>🔹 Bloc 4 — Compétences</h2>
     <ul>

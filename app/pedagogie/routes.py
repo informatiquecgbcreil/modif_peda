@@ -33,6 +33,20 @@ from .services import compute_objectif_scores, participant_timeline
 from . import bp
 
 
+PASSPORT_NOTE_CATEGORIES = {
+    "journal": "Journal",
+    "participation": "Participation",
+    "progression": "Progression",
+    "temoignage": "Témoignage",
+    "session": "Session",
+}
+
+
+def _normalize_note_category(raw: str | None) -> str:
+    val = (raw or "journal").strip().lower()
+    return val if val in PASSPORT_NOTE_CATEGORIES else "journal"
+
+
 @bp.route("/referentiels", methods=["GET", "POST"])
 @login_required
 @require_perm("pedagogie:view")
@@ -448,7 +462,10 @@ def participant_passeport(participant_id: int):
     participant, events, current_levels = participant_timeline(participant_id)
 
     selected_secteur = (request.args.get("secteur") or "").strip()
-    selected_categorie = (request.args.get("categorie") or "").strip()
+    selected_categorie = _normalize_note_category(request.args.get("categorie")) if request.args.get("categorie") else ""
+    notes_page = max(request.args.get("notes_page", 1, type=int), 1)
+    files_page = max(request.args.get("files_page", 1, type=int), 1)
+    page_size = 20
 
     presence_rows = (
         db.session.query(PresenceActivite)
@@ -469,10 +486,23 @@ def participant_passeport(participant_id: int):
         notes_q = notes_q.filter(PasseportNote.secteur == selected_secteur)
         files_q = files_q.filter(PasseportPieceJointe.secteur == selected_secteur)
 
-    notes = notes_q.order_by(PasseportNote.created_at.desc()).all()
-    files = files_q.order_by(PasseportPieceJointe.created_at.desc()).all()
     if selected_categorie:
-        notes = [n for n in notes if (n.categorie or "") == selected_categorie]
+        notes_q = notes_q.filter(PasseportNote.categorie == selected_categorie)
+
+    notes_total = notes_q.count()
+    files_total = files_q.count()
+    notes = (
+        notes_q.order_by(PasseportNote.created_at.desc())
+        .offset((notes_page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    files = (
+        files_q.order_by(PasseportPieceJointe.created_at.desc())
+        .offset((files_page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
 
     all_notes = PasseportNote.query.filter_by(participant_id=participant_id).all()
     sectors = sorted({(e.session.secteur if e.session else "") for e in events if e.session and e.session.secteur} |
@@ -481,9 +511,10 @@ def participant_passeport(participant_id: int):
     if not sectors:
         sectors = ["Global"]
 
+    notes_scope = [n for n in all_notes if (n.secteur or "") == selected_secteur] if selected_secteur else all_notes
     notes_by_cat = defaultdict(int)
-    for n in all_notes:
-        notes_by_cat[n.categorie or "journal"] += 1
+    for n in notes_scope:
+        notes_by_cat[_normalize_note_category(n.categorie)] += 1
 
     comp_ids = set(current_levels.keys())
     comp_rows = Competence.query.filter(Competence.id.in_(comp_ids)).all() if comp_ids else []
@@ -529,10 +560,68 @@ def participant_passeport(participant_id: int):
         notes=notes,
         notes_by_cat=notes_by_cat,
         selected_categorie=selected_categorie,
+        note_categories=PASSPORT_NOTE_CATEGORIES,
         files=files,
+        notes_page=notes_page,
+        files_page=files_page,
+        notes_total=notes_total,
+        files_total=files_total,
+        page_size=page_size,
         comp_map=comp_map,
         referentiel_stats=referentiel_stats,
     )
+    db.session.add(note)
+    db.session.commit()
+    flash("Note passeport enregistrée.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=note.secteur or ""))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/upload", methods=["POST"])
+@login_required
+@require_perm("pedagogie:edit")
+def participant_passeport_upload(participant_id: int):
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("Fichier manquant.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+
+    filename = secure_filename(f.filename)
+    if not filename:
+        flash("Nom de fichier invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+
+    root = os.path.join(current_app.instance_path, "passeport_uploads", str(participant_id))
+    os.makedirs(root, exist_ok=True)
+    save_name = f"{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{filename}"
+    path = os.path.join(root, save_name)
+    f.save(path)
+
+    row = PasseportPieceJointe(
+        participant_id=participant_id,
+        session_id=request.form.get("session_id", type=int),
+        secteur=(request.form.get("secteur") or "").strip() or None,
+        categorie=(request.form.get("categorie") or "atelier").strip() or "atelier",
+        titre=(request.form.get("titre") or "").strip() or None,
+        file_path=path,
+        original_name=filename,
+        mime_type=f.mimetype or mimetypes.guess_type(filename)[0],
+        created_by=current_user.id,
+    )
+    db.session.add(row)
+    db.session.commit()
+    flash("Pièce jointe ajoutée.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=row.secteur or ""))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/file/<int:file_id>")
+@login_required
+@require_perm("pedagogie:view")
+def participant_passeport_file_download(participant_id: int, file_id: int):
+    row = PasseportPieceJointe.query.get_or_404(file_id)
+    if row.participant_id != participant_id:
+        flash("Pièce jointe invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+    return send_file(row.file_path, as_attachment=True, download_name=row.original_name)
 
 
 @bp.route("/participant/<int:participant_id>/passeport/note", methods=["POST"])
@@ -548,7 +637,7 @@ def participant_passeport_note(participant_id: int):
         participant_id=participant_id,
         session_id=request.form.get("session_id", type=int),
         secteur=(request.form.get("secteur") or "").strip() or None,
-        categorie=(request.form.get("categorie") or "journal").strip() or "journal",
+        categorie=_normalize_note_category(request.form.get("categorie")),
         contenu=contenu,
         created_by=current_user.id,
     )
@@ -556,6 +645,40 @@ def participant_passeport_note(participant_id: int):
     db.session.commit()
     flash("Note passeport enregistrée.", "success")
     return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=note.secteur or ""))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/note/<int:note_id>/update", methods=["POST"])
+@login_required
+@require_perm("pedagogie:edit")
+def participant_passeport_note_update(participant_id: int, note_id: int):
+    note = PasseportNote.query.get_or_404(note_id)
+    if note.participant_id != participant_id:
+        flash("Note invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+    contenu = (request.form.get("contenu") or "").strip()
+    if not contenu:
+        flash("Le texte de la note est obligatoire.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=note.secteur or ""))
+    note.contenu = contenu
+    note.categorie = _normalize_note_category(request.form.get("categorie"))
+    db.session.commit()
+    flash("Note mise à jour.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=note.secteur or ""))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/note/<int:note_id>/delete", methods=["POST"])
+@login_required
+@require_perm("pedagogie:edit")
+def participant_passeport_note_delete(participant_id: int, note_id: int):
+    note = PasseportNote.query.get_or_404(note_id)
+    if note.participant_id != participant_id:
+        flash("Note invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+    secteur = note.secteur or ""
+    db.session.delete(note)
+    db.session.commit()
+    flash("Note supprimée.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=secteur))
 
 
 @bp.route("/participant/<int:participant_id>/passeport/upload", methods=["POST"])

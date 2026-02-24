@@ -9,6 +9,7 @@
         <a class="pill {% if tab == 'projet' %}active{% endif %}" href="{{ url_for('statsimpact.stats_pedagogie', tab='projet') }}">Suivi Projet</a>
         <a class="pill {% if tab == 'atelier' %}active{% endif %}" href="{{ url_for('statsimpact.stats_pedagogie', tab='atelier') }}">Suivi Atelier</a>
         <a class="pill {% if tab == 'participant' %}active{% endif %}" href="{{ url_for('statsimpact.stats_pedagogie', tab='participant') }}">Suivi Participant</a>
+        <a class="pill {% if tab == 'passport' %}active{% endif %}" href="{{ url_for('statsimpact.stats_pedagogie', tab='passport') }}">Menu Passeports</a>
       </div>
     </div>
 
@@ -140,6 +141,47 @@
             <div class="muted">Aucune compétence acquise pour le moment.</div>
           {% endfor %}
         {% endif %}
+      </div>
+    {% endif %}
+
+    {% if tab == 'passport' %}
+      <div class="card">
+        <h2>Menu Passeports participants</h2>
+        <form method="get" class="inline">
+          <input type="hidden" name="tab" value="passport">
+          <input class="in" name="participant_q" value="{{ participant_q or '' }}" placeholder="Rechercher nom/prénom...">
+          <button class="btn" type="submit">Rechercher</button>
+        </form>
+        <div class="spacer"></div>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Participant</th>
+                <th>Email</th>
+                <th>Ville</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in participants_for_passport %}
+                <tr>
+                  <td><strong>{{ p.nom }} {{ p.prenom }}</strong></td>
+                  <td class="muted">{{ p.email or '—' }}</td>
+                  <td class="muted">{{ p.ville or '—' }}</td>
+                  <td>
+                    <a class="btn" href="{{ url_for('pedagogie.participant_passeport', participant_id=p.id) }}">Ouvrir passeport</a>
+                    <a class="btn" href="{{ url_for('statsimpact.stats_pedagogie', tab='participant', participant_id=p.id) }}">Compétences acquises</a>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="4" class="muted">Aucun participant trouvé.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     {% endif %}
   </div>

@@ -34,6 +34,14 @@ from .services.mail_utils import send_email_with_attachment
 from app.services.quartiers import normalize_quartier_for_ville
 
 
+PASSPORT_NOTE_CATEGORIES = {"journal", "participation", "progression", "temoignage", "session"}
+
+
+def _normalize_note_category(raw: str | None) -> str:
+    val = (raw or "session").strip().lower()
+    return val if val in PASSPORT_NOTE_CATEGORIES else "session"
+
+
 # ------------------ Helpers ------------------
 
 def _is_admin_global():
@@ -993,7 +1001,7 @@ def emargement(session_id: int):
                 participant_id=participant.id,
                 session_id=s.id,
                 secteur=s.secteur,
-                categorie=(request.form.get("categorie") or "session").strip() or "session",
+                categorie=_normalize_note_category(request.form.get("categorie")),
                 contenu=contenu,
                 created_by=current_user.id,
             )
