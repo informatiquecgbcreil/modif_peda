@@ -109,6 +109,8 @@
     </div>
   </div>
 
+  {% set sec = selected_secteur if selected_secteur else sectors[0] %}
+  {% set s = summary.get(sec, {}) %}
   <div class="card">
     <h2>🔹 Bloc 4 — Compétences</h2>
     <ul>
