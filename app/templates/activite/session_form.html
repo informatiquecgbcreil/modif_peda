@@ -34,15 +34,15 @@
         {% endif %}
 
         <div class="spacer"></div>
-        <label>Module(s) de session (obligatoire)</label>
-        <select class="in" name="module_ids" multiple size="8" required>
+        <label>Module(s) de session (optionnel)</label>
+        <select class="in" name="module_ids" multiple size="8">
           {% for mod in modules|default([]) %}
             <option value="{{ mod.id }}">{{ mod.nom }} ({{ mod.competences|length }} compétences)</option>
           {% else %}
             <option disabled>Aucun module autorisé pour cet atelier/projet</option>
           {% endfor %}
         </select>
-        <div class="muted">Le terrain ne sélectionne plus les compétences manuellement : elles sont déduites automatiquement des modules.</div>
+        <div class="muted">Tu peux créer une session sans module/évaluation. Si des modules sont choisis, les compétences sont déduites automatiquement.</div>
 
         <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:10px;">
           <button class="btn" type="submit">Créer</button>

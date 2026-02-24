@@ -25,12 +25,21 @@ from app.models import (
     PedagogieModule,
     PlanProjetAtelierModule,
     Projet,
+    PasseportNote,
 )
 
 from . import bp
 from .services.docx_utils import generate_collectif_docx_pdf, generate_individuel_mensuel_docx, finalize_individuel_mensuel_pdf
 from .services.mail_utils import send_email_with_attachment
 from app.services.quartiers import normalize_quartier_for_ville
+
+
+PASSPORT_NOTE_CATEGORIES = {"journal", "participation", "progression", "temoignage", "session"}
+
+
+def _normalize_note_category(raw: str | None) -> str:
+    val = (raw or "session").strip().lower()
+    return val if val in PASSPORT_NOTE_CATEGORIES else "session"
 
 
 # ------------------ Helpers ------------------
@@ -977,6 +986,29 @@ def emargement(session_id: int):
 
             flash("Émargement enregistré.", "success")
             return redirect(url_for("activite.emargement", session_id=session_id))
+
+        if action == "quick_passport_note":
+            participant_id = request.form.get("participant_id", type=int)
+            participant = Participant.query.get(participant_id) if participant_id else None
+            if not participant:
+                flash("Participant invalide.", "danger")
+                return redirect(url_for("activite.emargement", session_id=session_id))
+            contenu = (request.form.get("contenu") or "").strip()
+            if not contenu:
+                flash("La note rapide ne peut pas être vide.", "danger")
+                return redirect(url_for("activite.emargement", session_id=session_id))
+            note = PasseportNote(
+                participant_id=participant.id,
+                session_id=s.id,
+                secteur=s.secteur,
+                categorie=_normalize_note_category(request.form.get("categorie")),
+                contenu=contenu,
+                created_by=current_user.id,
+            )
+            db.session.add(note)
+            db.session.commit()
+            flash("Note ajoutée au passeport.", "success")
+            return redirect(url_for("activite.emargement", session_id=session_id, highlight=participant.id))
 
     # participants list for autocomplete
     participants = Participant.query.order_by(Participant.nom.asc(), Participant.prenom.asc()).limit(500).all()

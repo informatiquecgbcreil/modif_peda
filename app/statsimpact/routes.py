@@ -314,6 +314,7 @@ def stats_pedagogie():
     projet_id = request.args.get("projet_id", type=int)
     atelier_id = request.args.get("atelier_id", type=int)
     participant_id = request.args.get("participant_id", type=int)
+    participant_q = (request.args.get("participant_q") or "").strip()
 
     projet = Projet.query.get(projet_id) if projet_id else None
     if projet and secteur and projet.secteur != secteur:
@@ -324,6 +325,15 @@ def stats_pedagogie():
         abort(403)
 
     participant = Participant.query.get(participant_id) if participant_id else None
+
+    participants_for_passport_q = Participant.query
+    if participant_q:
+        like = f"%{participant_q.lower()}%"
+        participants_for_passport_q = participants_for_passport_q.filter(
+            func.lower(func.coalesce(Participant.nom, "")).like(like)
+            | func.lower(func.coalesce(Participant.prenom, "")).like(like)
+        )
+    participants_for_passport = participants_for_passport_q.order_by(Participant.nom.asc(), Participant.prenom.asc()).limit(200).all()
 
     projet_objectifs = []
     if projet:
@@ -360,6 +370,8 @@ def stats_pedagogie():
         projet=projet,
         atelier=atelier,
         participant=participant,
+        participant_q=participant_q,
+        participants_for_passport=participants_for_passport,
         projet_objectifs=projet_objectifs,
         atelier_stats=atelier_stats,
         participant_groups=participant_groups,
