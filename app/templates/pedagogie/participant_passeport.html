@@ -2,41 +2,99 @@
 {% block body %}
 <div class="stack">
   <div class="card">
-    <h1 style="margin-top:0;">Passeport compétences · {{ participant.nom }} {{ participant.prenom }}</h1>
-    <p class="muted">Niveau actuel = dernière évaluation enregistrée (0: non abordé, 1: vu/compris, 2: fait avec aide, 3: fait seul).</p>
+    <h1 style="margin-top:0;">Passeport habitant · {{ participant.nom }} {{ participant.prenom }}</h1>
+    <div class="row" style="gap:8px;flex-wrap:wrap;">
+      <a class="btn" href="{{ url_for('activite.index') }}">Retour émargement</a>
+      {% for sec in sectors %}
+        <a class="btn" href="{{ url_for('pedagogie.participant_passeport', participant_id=participant.id, secteur=sec) }}">{{ sec }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% set sec = selected_secteur if selected_secteur else sectors[0] %}
+  {% set s = summary.get(sec, {}) %}
+  <div class="card">
+    <h2>🔹 Bloc 1 — Résumé auto ({{ sec }})</h2>
+    <div class="grid" style="grid-template-columns:repeat(5,minmax(120px,1fr)); gap:10px;">
+      <div><div class="muted">Nb sessions</div><strong>{{ s.nb_sessions or 0 }}</strong></div>
+      <div><div class="muted">Dernière participation</div><strong>{{ s.last_participation or '—' }}</strong></div>
+      <div><div class="muted">Nb notes</div><strong>{{ s.nb_notes or 0 }}</strong></div>
+      <div><div class="muted">Compétences validées</div><strong>{{ s.nb_competences_validees or 0 }}</strong></div>
+      <div><div class="muted">Intensité</div><strong>{{ s.intensity or 0 }}/mois</strong></div>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1fr 1fr; gap:12px;">
+    <div class="card">
+      <h2>🔹 Bloc 2 — Journal</h2>
+      <form method="post" action="{{ url_for('pedagogie.participant_passeport_note', participant_id=participant.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="secteur" value="{{ sec }}">
+        <label>Note rapide</label>
+        <textarea class="in" name="contenu" rows="3" required placeholder="Observation, progression, témoignage..."></textarea>
+        <div class="spacer"></div>
+        <label>Catégorie</label>
+        <select class="in" name="categorie">
+          <option value="journal">Journal</option><option value="participation">Participation</option><option value="progression">Progression</option><option value="temoignage">Témoignage</option>
+        </select>
+        <div class="spacer"></div>
+        <button class="btn ok" type="submit">Enregistrer</button>
+      </form>
+
+      <div class="spacer"></div>
+      <form method="get" class="row" style="gap:8px;align-items:end;">
+        <input type="hidden" name="secteur" value="{{ sec }}">
+        <div><label>Filtre catégorie</label>
+          <select class="in" name="categorie"><option value="">Toutes</option>{% for cat,nb in notes_by_cat.items() %}<option value="{{ cat }}" {% if selected_categorie==cat %}selected{% endif %}>{{ cat }} ({{ nb }})</option>{% endfor %}</select>
+        </div>
+        <button class="btn" type="submit">Filtrer</button>
+      </form>
+      <ul>
+        {% for n in notes %}<li><strong>{{ n.created_at.date() if n.created_at else '' }}</strong> · {{ n.categorie }} — {{ n.contenu }}</li>{% else %}<li class="muted">Aucune note.</li>{% endfor %}
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>🔹 Bloc 3 — Pièces jointes</h2>
+      <form method="post" action="{{ url_for('pedagogie.participant_passeport_upload', participant_id=participant.id) }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="secteur" value="{{ sec }}">
+        <input class="in" name="titre" placeholder="Titre (optionnel)">
+        <div class="spacer"></div>
+        <select class="in" name="categorie"><option value="atelier">Atelier</option><option value="temoignage">Témoignage</option></select>
+        <div class="spacer"></div>
+        <input class="in" type="file" name="file" required>
+        <div class="spacer"></div>
+        <button class="btn" type="submit">Upload</button>
+      </form>
+      <ul>
+        {% for f in files %}<li>{{ f.titre or f.original_name }} · <a href="{{ url_for('pedagogie.participant_passeport_file_download', participant_id=participant.id, file_id=f.id) }}">Télécharger</a></li>{% else %}<li class="muted">Aucune pièce jointe.</li>{% endfor %}
+      </ul>
+    </div>
   </div>
 
   <div class="card">
-    <h2>Niveaux actuels</h2>
+    <h2>🔹 Bloc 4 — Compétences</h2>
     <ul>
-      {% for comp_id, lvl in current_levels.items() %}
-        <li>Compétence #{{ comp_id }} : <strong>{{ lvl }}</strong></li>
+      {% for ref,stats in referentiel_stats.items() %}
+        <li>{{ ref }} : {{ stats.valides }}/{{ stats.total }} validées</li>
       {% else %}
         <li class="muted">Aucune évaluation.</li>
       {% endfor %}
     </ul>
-  </div>
-
-  <div class="card">
-    <h2>Timeline</h2>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>Date</th><th>Compétence</th><th>Niveau</th><th>Commentaire</th><th>Session</th></tr></thead>
+        <thead><tr><th>Date</th><th>Compétence</th><th>État</th><th>Commentaire</th><th>Session</th></tr></thead>
         <tbody>
           {% for e in events %}
-            <tr>
-              <td>{{ e.date_evaluation }}</td>
-              <td>{{ e.competence.code }} · {{ e.competence.nom }}</td>
-              <td>{{ e.etat }}</td>
-              <td>{{ e.commentaire or '' }}</td>
-              <td>{{ e.session_id or '—' }}</td>
-            </tr>
+            <tr><td>{{ e.date_evaluation }}</td><td>{{ e.competence.code }} · {{ e.competence.nom }}</td><td>{{ e.etat }}</td><td>{{ e.commentaire or '' }}</td><td>{{ e.session_id or '—' }}</td></tr>
           {% else %}
             <tr><td colspan="5" class="muted">Aucune donnée.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+    <a class="btn" href="{{ url_for('activite.index') }}">Évaluer (via émargement)</a>
   </div>
 </div>
 {% endblock %}
