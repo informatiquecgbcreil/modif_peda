@@ -86,7 +86,7 @@
 
     <div class="card">
       <h2>🔹 Bloc 3 — Pièces jointes</h2>
-      <form method="post" action="{{ url_for('pedagogie.participant_passeport_upload', participant_id=participant.id) }}" enctype="multipart/form-data">
+      <form method="post" action="{{ url_for('pedagogie.participant_passeport_file_upload', participant_id=participant.id) }}" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="secteur" value="{{ sec }}">
         <input class="in" name="titre" placeholder="Titre (optionnel)">
