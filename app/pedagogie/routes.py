@@ -570,6 +570,163 @@ def participant_passeport(participant_id: int):
         comp_map=comp_map,
         referentiel_stats=referentiel_stats,
     )
+    db.session.add(note)
+    db.session.commit()
+    flash("Note passeport enregistrée.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=note.secteur or ""))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/upload", methods=["POST"])
+@login_required
+@require_perm("pedagogie:edit")
+def participant_passeport_upload(participant_id: int):
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("Fichier manquant.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+
+    filename = secure_filename(f.filename)
+    if not filename:
+        flash("Nom de fichier invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+
+    root = os.path.join(current_app.instance_path, "passeport_uploads", str(participant_id))
+    os.makedirs(root, exist_ok=True)
+    save_name = f"{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{filename}"
+    path = os.path.join(root, save_name)
+    f.save(path)
+
+    row = PasseportPieceJointe(
+        participant_id=participant_id,
+        session_id=request.form.get("session_id", type=int),
+        secteur=(request.form.get("secteur") or "").strip() or None,
+        categorie=(request.form.get("categorie") or "atelier").strip() or "atelier",
+        titre=(request.form.get("titre") or "").strip() or None,
+        file_path=path,
+        original_name=filename,
+        mime_type=f.mimetype or mimetypes.guess_type(filename)[0],
+        created_by=current_user.id,
+    )
+    db.session.add(row)
+    db.session.commit()
+    flash("Pièce jointe ajoutée.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=row.secteur or ""))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/file/<int:file_id>")
+@login_required
+@require_perm("pedagogie:view")
+def participant_passeport_file_download(participant_id: int, file_id: int):
+    row = PasseportPieceJointe.query.get_or_404(file_id)
+    if row.participant_id != participant_id:
+        flash("Pièce jointe invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+    return send_file(row.file_path, as_attachment=True, download_name=row.original_name)
+
+
+@bp.route("/participant/<int:participant_id>/passeport/note", methods=["POST"])
+@login_required
+@require_perm("pedagogie:edit")
+def participant_passeport_note(participant_id: int):
+    contenu = (request.form.get("contenu") or "").strip()
+    if not contenu:
+        flash("Le texte de la note est obligatoire.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+
+    note = PasseportNote(
+        participant_id=participant_id,
+        session_id=request.form.get("session_id", type=int),
+        secteur=(request.form.get("secteur") or "").strip() or None,
+        categorie=_normalize_note_category(request.form.get("categorie")),
+        contenu=contenu,
+        created_by=current_user.id,
+    )
+    db.session.add(note)
+    db.session.commit()
+    flash("Note passeport enregistrée.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=note.secteur or ""))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/note/<int:note_id>/update", methods=["POST"])
+@login_required
+@require_perm("pedagogie:edit")
+def participant_passeport_note_update(participant_id: int, note_id: int):
+    note = PasseportNote.query.get_or_404(note_id)
+    if note.participant_id != participant_id:
+        flash("Note invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+    contenu = (request.form.get("contenu") or "").strip()
+    if not contenu:
+        flash("Le texte de la note est obligatoire.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=note.secteur or ""))
+    note.contenu = contenu
+    note.categorie = _normalize_note_category(request.form.get("categorie"))
+    db.session.commit()
+    flash("Note mise à jour.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=note.secteur or ""))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/note/<int:note_id>/delete", methods=["POST"])
+@login_required
+@require_perm("pedagogie:edit")
+def participant_passeport_note_delete(participant_id: int, note_id: int):
+    note = PasseportNote.query.get_or_404(note_id)
+    if note.participant_id != participant_id:
+        flash("Note invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+    secteur = note.secteur or ""
+    db.session.delete(note)
+    db.session.commit()
+    flash("Note supprimée.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=secteur))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/upload", methods=["POST"])
+@login_required
+@require_perm("pedagogie:edit")
+def participant_passeport_upload(participant_id: int):
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("Fichier manquant.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+
+    filename = secure_filename(f.filename)
+    if not filename:
+        flash("Nom de fichier invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+
+    root = os.path.join(current_app.instance_path, "passeport_uploads", str(participant_id))
+    os.makedirs(root, exist_ok=True)
+    save_name = f"{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{filename}"
+    path = os.path.join(root, save_name)
+    f.save(path)
+
+    row = PasseportPieceJointe(
+        participant_id=participant_id,
+        session_id=request.form.get("session_id", type=int),
+        secteur=(request.form.get("secteur") or "").strip() or None,
+        categorie=(request.form.get("categorie") or "atelier").strip() or "atelier",
+        titre=(request.form.get("titre") or "").strip() or None,
+        file_path=path,
+        original_name=filename,
+        mime_type=f.mimetype or mimetypes.guess_type(filename)[0],
+        created_by=current_user.id,
+    )
+    db.session.add(row)
+    db.session.commit()
+    flash("Pièce jointe ajoutée.", "success")
+    return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id, secteur=row.secteur or ""))
+
+
+@bp.route("/participant/<int:participant_id>/passeport/file/<int:file_id>")
+@login_required
+@require_perm("pedagogie:view")
+def participant_passeport_file_download(participant_id: int, file_id: int):
+    row = PasseportPieceJointe.query.get_or_404(file_id)
+    if row.participant_id != participant_id:
+        flash("Pièce jointe invalide.", "danger")
+        return redirect(url_for("pedagogie.participant_passeport", participant_id=participant_id))
+    return send_file(row.file_path, as_attachment=True, download_name=row.original_name)
 
 
 @bp.route("/participant/<int:participant_id>/passeport/note", methods=["POST"])
