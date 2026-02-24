@@ -159,13 +159,16 @@
                 <td>{% if pr.signature_path %}<span class="muted">OK</span>{% else %}<span class="muted">—</span>{% endif %}</td>
                 <td class="muted">{{ pr.created_at }}</td>
                 <td>
-          {% if session_competences %}
+                  {% if session_competences %}
                     <button class="btn" type="button" data-bs-toggle="modal" data-bs-target="#evalModal{{ pr.participant.id }}">
                       Évaluer
                     </button>
                   {% else %}
                     <span class="muted">Aucune compétence</span>
                   {% endif %}
+                  <button class="btn" type="button" data-bs-toggle="modal" data-bs-target="#passportNoteModal{{ pr.participant.id }}">
+                    Ajouter une note au passeport
+                  </button>
                   <a class="btn" href="{{ url_for('pedagogie.participant_passeport', participant_id=pr.participant.id) }}">Passeport</a>
                 </td>
               </tr>
@@ -246,6 +249,38 @@
 </div>
 
 {% for pr in presences %}
+  <div class="modal fade" id="passportNoteModal{{ pr.participant.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Note rapide · {{ pr.participant.nom }} {{ pr.participant.prenom }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+        </div>
+        <form method="post">
+          <div class="modal-body">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="quick_passport_note">
+            <input type="hidden" name="participant_id" value="{{ pr.participant.id }}">
+            <label>Texte</label>
+            <textarea class="in" name="contenu" rows="3" required placeholder="Observation rapide..."></textarea>
+            <div class="spacer"></div>
+            <label>Catégorie</label>
+            <select class="in" name="categorie">
+              <option value="session">Session</option>
+              <option value="progression">Progression</option>
+              <option value="participation">Participation</option>
+              <option value="temoignage">Témoignage</option>
+            </select>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn" data-bs-dismiss="modal">Annuler</button>
+            <button type="submit" class="btn ok">Enregistrer</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   {% if session_competences %}
     <div class="modal fade" id="evalModal{{ pr.participant.id }}" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-scrollable">

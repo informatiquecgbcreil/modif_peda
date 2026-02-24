@@ -1089,6 +1089,43 @@ class Evaluation(db.Model):
     )
 
 
+class PasseportNote(db.Model):
+    __tablename__ = "passeport_note"
+
+    id = db.Column(db.Integer, primary_key=True)
+    participant_id = db.Column(db.Integer, db.ForeignKey("participant.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_id = db.Column(db.Integer, db.ForeignKey("session_activite.id", ondelete="SET NULL"), nullable=True, index=True)
+    secteur = db.Column(db.String(80), nullable=True, index=True)
+    categorie = db.Column(db.String(60), nullable=False, default="journal", index=True)
+    contenu = db.Column(db.Text, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    participant = db.relationship("Participant")
+    session = db.relationship("SessionActivite")
+    user = db.relationship("User")
+
+
+class PasseportPieceJointe(db.Model):
+    __tablename__ = "passeport_piece_jointe"
+
+    id = db.Column(db.Integer, primary_key=True)
+    participant_id = db.Column(db.Integer, db.ForeignKey("participant.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_id = db.Column(db.Integer, db.ForeignKey("session_activite.id", ondelete="SET NULL"), nullable=True, index=True)
+    secteur = db.Column(db.String(80), nullable=True, index=True)
+    categorie = db.Column(db.String(60), nullable=False, default="atelier", index=True)
+    titre = db.Column(db.String(255), nullable=True)
+    file_path = db.Column(db.String(255), nullable=False)
+    original_name = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(120), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    participant = db.relationship("Participant")
+    session = db.relationship("SessionActivite")
+    user = db.relationship("User")
+
+
 class ObjectifSuivi(db.Model):
     __tablename__ = "objectif_suivi"
 
