@@ -1,0 +1,50 @@
+{% extends 'layout.html' %}
+{% block body %}
+<div class="stack">
+  <div class="card">
+    <h1 style="margin-top:0;">Évaluation batch · {{ atelier.nom }}</h1>
+    <p class="muted">Grille terrain minimaliste : participants × compétences, boutons 0/1/2/3.</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Participant</th>
+              {% for c in competences %}
+                <th>{{ c.code }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in participants %}
+              <tr>
+                <td><strong>{{ p.nom }} {{ p.prenom }}</strong></td>
+                {% for c in competences %}
+                  {% set v = eval_map.get((p.id, c.id)) %}
+                  <td>
+                    <div style="display:flex; gap:4px;">
+                      {% for level in [0,1,2,3] %}
+                        <label style="display:inline-flex; align-items:center; gap:2px;">
+                          <input type="radio" name="etat_{{ p.id }}_{{ c.id }}" value="{{ level }}" {% if v == level %}checked{% endif %}>{{ level }}
+                        </label>
+                      {% endfor %}
+                    </div>
+                  </td>
+                {% endfor %}
+              </tr>
+            {% else %}
+              <tr><td colspan="{{ 1 + (competences|length) }}" class="muted">Aucun participant émargé.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="muted">0 non abordé · 1 vu/compris · 2 réalisé avec aide · 3 réalisé seul</div>
+      <div class="row" style="gap:8px; margin-top:8px;">
+        <button class="btn ok" type="submit">Sauvegarder tout</button>
+        <a class="btn" href="{{ url_for('activite.emargement', session_id=session.id) }}">Retour émargement</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

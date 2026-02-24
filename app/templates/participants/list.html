@@ -1,0 +1,207 @@
+{% extends "layout.html" %}
+{% block body %}
+
+<div class="stack">
+  <div class="inline">
+    <h1 style="margin:0">Participants</h1>
+
+    <a class="btn ok" href="{{ url_for('participants.new_participant') }}">
+      ➕ Nouveau participant
+    </a>
+
+    {% if can('participants:delete') or can('ateliers:sync') %}
+      <form method="post" action="{{ url_for('participants.cleanup_fakes') }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="preview" value="1" id="cleanupPreview">
+        <button class="btn warn" type="submit">🧹 Nettoyage import (preview)</button>
+      </form>
+
+      <form
+        method="post"
+        action="{{ url_for('participants.cleanup_fakes') }}"
+        style="display:inline;"
+        onsubmit="return confirm('Supprimer les faux participants détectés (sans présences) ?');"
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="preview" value="0">
+        <button class="btn danger" type="submit">🧨 Nettoyage import (supprimer)</button>
+      </form>
+    {% endif %}
+
+    <a class="btn" href="{{ url_for('participants.duplicates') }}">🧬 Doublons</a>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Recherche</h2>
+
+    <form
+      class="inline"
+      method="get"
+      action="{{ url_for('participants.list_participants') }}"
+      style="gap:8px; flex-wrap:wrap"
+    >
+      <input
+        class="in"
+        style="max-width:320px"
+        type="text"
+        name="q"
+        placeholder="Nom, prénom, email, téléphone"
+        value="{{ q }}"
+      >
+
+      <!-- Ville -->
+      <select name="ville" class="in" style="max-width:220px">
+        <option value="">Ville (toutes)</option>
+        {% for v in villes %}
+          <option value="{{ v }}" {% if f_ville == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+
+      <!-- Quartier -->
+      <select name="quartier_id" class="in" style="max-width:260px">
+        <option value="">Quartier (tous)</option>
+        {% for qt in quartiers %}
+          <option
+            value="{{ qt.id }}"
+            {% if f_quartier_id and f_quartier_id|int == qt.id %}selected{% endif %}
+          >
+            {{ qt.ville }} — {{ qt.nom }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <!-- Genre -->
+      <select name="genre" class="in" style="max-width:180px">
+        <option value="">Genre (tous)</option>
+        {% for g in genres %}
+          <option value="{{ g }}" {% if f_genre == g %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+
+      <!-- Type public -->
+      <select name="type_public" class="in" style="max-width:180px">
+        <option value="">Type public (tous)</option>
+        {% for t in types_public %}
+          <option value="{{ t }}" {% if f_type_public == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+
+      <!-- Présence -->
+      <select name="presence" class="in" style="max-width:220px">
+        <option value="">Présence (tous)</option>
+        <option value="with" {% if f_presence == 'with' %}selected{% endif %}>Avec présence</option>
+        <option value="without" {% if f_presence == 'without' %}selected{% endif %}>Sans présence</option>
+      </select>
+
+      {% if is_global %}
+        <!-- Créé pour (secteur) - optionnel -->
+        <input
+          class="in"
+          style="max-width:220px"
+          type="text"
+          name="created_secteur"
+          placeholder="Créé pour (secteur)"
+          value="{{ f_created_secteur }}"
+        >
+      {% endif %}
+
+      {% if not can('participants:view_all') %}
+        <select name="scope" class="in" style="max-width:280px">
+          <!-- par défaut, scope est vide => comportement 'secteur' -->
+          <option value="" {% if not scope or scope == 'secteur' %}selected{% endif %}>
+            Dans mon secteur (créés + déjà vus)
+          </option>
+
+          <option value="created" {% if scope == 'created' %}selected{% endif %}>
+            Créés par mon secteur (y compris jamais venus)
+          </option>
+
+          <option value="annuaire" {% if scope == 'annuaire' %}selected{% endif %}>
+            Annuaire global (recherche)
+          </option>
+        </select>
+      {% else %}
+        <select name="scope" class="in" style="max-width:220px">
+          <option value="" {% if not scope %}selected{% endif %}>Tous</option>
+          <option value="secteur" {% if scope == 'secteur' %}selected{% endif %}>Filtrer par secteur</option>
+        </select>
+
+        <input
+          class="in"
+          style="max-width:220px"
+          type="text"
+          name="secteur"
+          placeholder="Secteur"
+          value="{{ request.args.get('secteur','') }}"
+        >
+      {% endif %}
+
+      <button class="btn" type="submit">Rechercher</button>
+      <a class="btn" href="{{ url_for('participants.list_participants') }}">Reset</a>
+    </form>
+
+    {% if not can('participants:view_all') and scope == 'annuaire' %}
+      <div class="muted" style="margin-top:8px; font-size:12px">
+        ⚠️ L’annuaire global s’affiche uniquement avec une recherche (au moins 2 caractères).
+        Sans recherche, la page revient automatiquement au mode “Dans mon secteur”.
+      </div>
+    {% endif %}
+
+    <div class="tablewrap" style="margin-top:12px">
+      <table>
+        <thead>
+          <tr>
+            <th>Nom</th>
+            <th>Contact</th>
+            <th>Profil</th>
+            <th>Créé pour</th>
+            <th></th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for p in items %}
+            <tr>
+              <td><strong>{{ p.nom }} {{ p.prenom }}</strong></td>
+
+              <td>
+                {% if p.email %}
+                  <div>{{ p.email }}</div>
+                {% endif %}
+                {% if p.telephone %}
+                  <div class="muted" style="font-size:12px">{{ p.telephone }}</div>
+                {% endif %}
+                {% if not p.email and not p.telephone %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+
+              <td>
+                <span class="badge">{{ p.type_public or 'H' }}</span>
+                {% if p.ville %}
+                  <span class="muted" style="margin-left:8px">{{ p.ville }}</span>
+                {% endif %}
+              </td>
+
+              <td>{{ p.created_secteur or '—' }}</td>
+
+              <td style="text-align:right">
+                <a class="btn" href="{{ url_for('participants.edit_participant', participant_id=p.id) }}">
+                  Ouvrir
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+
+          {% if not items %}
+            <tr>
+              <td colspan="5" class="muted">Aucun participant pour l’instant.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
